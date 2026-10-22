@@ -1,121 +1,45 @@
 # Repository Guidelines
 
-## Product and Authority
+## Product
 
-REA is a local-only reverse-engineering tool with shared CLI/MCP workflows. Distinguish observations, derivations, inferences, and unknowns; preserve Evidence provenance and session semantics through both adapters. Provider support and setup live in [README.md](README.md#choosing-a-deep-analysis-provider) and its linked guides.
+Forward Deploy Engineering Anything (FDEA) is an MCP server and CLI that ingest documentation, rank evidence-backed software opportunities, build a verified process model for the opportunity the user selects, ask what the documents leave open, and generate an AdonisJS 7 + **Vue** artifact. Process UI is built by the agent after generation, not by codegen. Both adapters call the same application service, so behavior must never diverge between them.
 
-Follow the [contribution scope and fail-closed integration rule](CONTRIBUTING.md#contribution-scope). Do not integrate capabilities while material scope, authority, side-effect, or required verification questions remain unresolved. For new providers or capabilities involving target execution, injection, mutation, or protection recovery, seek the required maintainer scope decision before substantial implementation for integration. Welcome early proposals, small exploratory prototypes, and draft PRs that help resolve questions; they do not authorize integration.
+- Discover value before modeling: opportunity map → priority clarifications → ranked list → selected scope → process model.
+- Never invent optional features or ROI. What the documents do not settle is an `unknown` or a clarification.
+- Fidelity is always asked: `foundation` (production) or `prototype` (lightweight approach gallery).
+- For foundations: RBAC and cloud-or-local are always asked, never defaulted; the derived database schema must be approved before generation.
+- Foundation codegen emits data, HTTP, auth, MCP, design tokens and a thin Vue shell; `UI.md` / `ui_backlog` list the Inertia pages the agent must invent.
+- Prototype codegen emits a thin Adonis + Vue gallery with mock fixtures and approach folders (`PROTOTYPE.md`); no process Lucid models, MCP, or RBAC.
+- Generated foundations are AI-native: they expose an MCP server whose tools reuse the same RBAC permissions as the UI.
+- Every opportunity and process-model element carries a verbatim quote that is verified against the stored source text.
 
-Ghidra uses ephemeral databases without modifying executable bytes or controlling a GUI; Windows Ghidra P0 has no mutation authority. IDA analysis is read-only; never save or close an attached GUI database.
+## Architecture
 
-Configuration changes must be additive and idempotent, with backups. Installers must not install or upgrade unrelated software, including Homebrew, Node.js, npm, Java, or Ghidra. Ghidra and IDA are bring-your-own. `rea setup` must show its planned changes and require approval before writing files or installing Hopper.
+Dependencies flow inward: `contracts` and `domain`, then `process` and `design`, then `application`, then adapters (`cli.ts`, `server/`) and composition.
 
-Preserve caller-selected inputs and local evidence, including output, URLs, paths, digests, and metadata. Redact transport authentication credentials and explicitly marked sensitive values; do not infer secrecy from names or text patterns. Do not persist the ambient environment merely because a child inherits it.
+- `src/contracts/`: Zod schemas for the opportunity map, process model, project state and tool inputs. Tool descriptions live next to them.
+- `src/process/`: opportunity ranking, naming, integrity validation, completeness gaps and derived clarifications.
+- `src/ingestion/`: one extractor per source kind. OCR sits behind the `OcrPort`.
+- `src/design/`: color helpers and design-token resolution (agent-provided, then inferred from design sources, then the shadcn default).
+- `src/application/`: `FdeaService` workflows and the `ApplicationGenerator` port. `callTool` validates input and is the single entry for CLI and MCP.
+- `src/codegen/adonis/`: the Adonis + Vue generator. `plan.ts` derives permissions, roles and transitions once; `emit*.ts` are pure functions returning files (`emitUi.ts` / `emitPrototype.ts` write agent contracts); `AdonisGenerator.ts` scaffolds `--kit=vue`, then foundation or lightweight prototype paths through an injectable `CommandRunner`.
+- `src/store/`: disk-backed project store with atomic writes.
+- `src/setup/`: `fdea setup` and `fdea doctor`.
 
-## Architecture and Cleanup
+Parse unknown input at the boundary and model expected failures with `Result` and the tagged `FdeaError`. Keep identity values (ids, table names) separate from display labels. Remove superseded code instead of keeping aliases.
 
-Dependencies flow inward: domain semantics and contracts, provider adapters, shared application workflows, then CLI/MCP adapters. Keep engine protocols and provider-specific code out of domain/application layers. See [docs/architecture.mermaid](docs/architecture.mermaid) when changing composition.
+## Generated application rules
 
-Give each interpretation and resource a clear owner. Consumers must use that owner's parsed facts rather than reinterpret raw source. Preserve identity, omission, uncertainty, and source evidence across boundaries. Retain ownership of resources whose cleanup failed. Reuse `src/process/` supervision and identity primitives; a PID and executable path alone do not establish ownership after exit or reuse.
-
-Keep proof of ownership separate from validity, editability, and readiness. Malformed owned data may still be safely removable. Unresolved identity or applicability must remain unknown rather than be treated as absent, foreign, or aligned.
-
-Assess brittleness in touched code during implementation, debugging, review, and maintenance. Fix the producing representation or ownership rule before adding downstream repairs. Normalize once at the owning boundary using format-aware parsers. Remove superseded representations, aliases, wrappers, and redundant tests after verifying affected consumers. Introduce abstractions only when they remove observed complexity.
-
-When fixing a bug, inspect the producing boundary and affected consumers for duplicated interpretation or unclear ownership. Complete any directly related refactor in the same change and remove superseded code. Passing regression tests alone does not establish that the brittleness is resolved. If related cleanup remains, explain what remains and why.
-
-When addressing a review thread, inspect the producing boundary and affected consumers for brittleness. Complete directly related refactoring in the same change. Before resolving the thread, explain the root cause, structural fix, validation, and any remaining cleanup.
-
-Parse unknown boundary values and model expected failures with the tagged error algebra and `Result`. Preserve partial facts and meaningful failure reasons. Keep identity and lookup values separate from display formatting; preserve source values and explicit unknowns when normalization loses information. Absolute paths, file URLs, and HTTP paths have different semantics.
-
-Validate advertised JSON Schemas after SDK conversion against their declared dialect and actual clients. Bind handlers to named contracts with exact types; catalog ordering must never select an operation or schema.
-
-## Performance
-
-Design analysis workflows and agent interfaces for efficiency from the first
-implementation. Correctness, useful answers, Evidence provenance, caller choices,
-compatibility and safe resource bounds remain required.
-
-Optimize in this order:
-
-1. Agent tokens and context. Return the smallest sufficient answer with
-   necessary provenance, coverage and limitations. Use task selection,
-   summaries, paging and retained Evidence where supported; honor requested
-   detail and keep complete Evidence accessible. Count the whole task,
-   including schemas, extra calls and retries.
-2. Analysis time. Reuse validated results and shared work. Cache keys must
-   cover result-affecting inputs; define invalidation and lifetime. Validate
-   freshness before reporting cached live state as current.
-3. CPU and memory. Avoid unnecessary work and copies; bound concurrency,
-   retained state and serialization growth.
-
-For changes affecting these costs, measure representative completed tasks and
-compare equivalent workflows before and after where available. Report token
-usage, elapsed time, CPU time and peak process-family memory. Separate cold
-and warm runs, label estimates, and state unmeasured costs. Fewer bytes alone
-do not establish fewer tokens or faster analysis.
+- Emitters follow the output of the real AdonisJS 7 Vue starter kit; verify changes by generating an application, not only by unit tests. A generated foundation must pass `npm run typecheck` and `node ace build` before process UI exists. Prototypes skip the production build step.
+- Treat the starter kit as input: patch it with exact-marker replacements that fail loudly when the kit changes shape.
+- Do not use the shadcn CLI; foundation UI primitives are emitted directly so generation is deterministic.
+- Process screens are agent-owned: do not reintroduce entity page codegen. Keep controllers and `UI.md` aligned on page names and props.
 
 ## Development
 
-Use [.nvmrc](.nvmrc) and `package.json#packageManager` for the pinned toolchain. Cursor Cloud may place older Node.js first on `PATH`; environment setup installs the pinned toolchain under `/usr/local/bin`.
+Use [.nvmrc](.nvmrc) and `package.json#packageManager`.
 
-- `npm ci`: install locked dependencies.
-- `npm run build:cached`: build the runtime and packaged skill.
-- `npm run test:local -- PATH...`: source tests without building.
-- `npm run test:focused -- PATH...`: exact tests with their required artifacts.
-- `npm run check:fast`: cached typecheck/lint and the pre-push check.
-- `npm run docs:check`: validate generated documentation.
+- `npm ci`, `npm run build`, `npm run check` (typecheck, lint, tests), `npm run format`.
+- Generation tests that scaffold a real application need network access and take minutes; keep them out of the default test run.
 
-Use relevant checks for the change. The complete local gate, `npm run check:pr`, is optional for broad changes or CI diagnosis. See [CONTRIBUTING.md](CONTRIBUTING.md) for development, generated-file ownership, and release conventions.
-
-`docs/public/product-catalog.json`, `docs/verification/managed-conformance-*.json`, and `skills/` are ignored outputs. Edit source contracts and `.agents/skills/reverse-engineer-anything/`, then regenerate as needed. `.cache/mcp-tool-catalog.json` is test metadata; runtime builds and source checking do not consume it. Never commit binaries, provider project documents, credentials, `dist/`, `node_modules/`, or local planning artifacts.
-
-## Tool and Test Changes
-
-For tool design, follow [docs/tool-design.md](docs/tool-design.md): start from the analyst question, reuse existing contracts, preserve caller choices, and return useful evidence inline. Limits must follow real format, protocol, authority, or resource constraints. Account for representation expansion before allocation; derive completeness from examined coverage.
-
-For test changes or provider claims, use [docs/testing.md](docs/testing.md). Prefer real public CLI/MCP workflows, then production-boundary integration, then producer goldens. Keep module tests for distinct semantics stronger workflows cannot reliably reproduce. Preserve malformed-input, cancellation, cleanup, permission, capacity, and target-identity coverage when pruning. Report unverified coverage explicitly; simulated providers do not establish real-provider behavior.
-
-Use Conventional Commit subjects and PR titles. Mark breaking changes with `!` or a `BREAKING CHANGE:` footer. Describe behavior changes, relevant validation, and real-provider verification scope.
-
-## Issue Reports
-
-Follow [issue reporting guidance](CONTRIBUTING.md#reporting-issues) and the matching
-issue form. Keep reports concise and cite the smallest useful evidence.
-Distinguish observed results, source-derived reasoning, hypotheses, and proposed
-checks. Never claim runtime reproduction or measurements you did not perform.
-Use `NOT_ENOUGH_INFO` with an explanation for missing narrative answers or evidence.
-Incomplete reports, source-only findings, and early feature or design ideas are
-welcome when their limitations are explicit; a completed diagnosis or fix is not
-required to open an issue.
-
-## Pull Request Readiness
-
-Follow [human ownership and readiness](CONTRIBUTING.md#pull-request-ownership-and-readiness)
-when preparing a PR. AI-assisted contributions are welcome; a human must review
-and own the final diff, check the validation evidence and its limitations, and
-explicitly declare the PR ready for initial maintainer review.
-
-Keep the PR body concise and current, with the concrete problem, observable
-outcome, approach, and evidence. Report only checks that actually ran as executed;
-distinguish source-derived conclusions, proposed checks, and unavailable coverage.
-Address actionable automated review findings and explain disagreements.
-
-Leave the template's **Author readiness** declarations unchecked for the human
-owner to complete. Never attest to human review on their behalf. Keep the PR in
-draft until the human declares the PR initially ready. Later pushes do not
-invalidate that declaration or require another human sign-off. Keep the PR body
-and affected validation current as work changes. The readiness check validates
-the filled declaration; CI and automated review results do not establish that
-human review occurred, maintainer scope approval, or merge permission.
-
-<!-- BEGIN:turborepo-agent-rules -->
-
-# This is NOT the Turborepo you know
-
-Turborepo configuration, task behavior, and CLI commands can vary between installed versions and may differ from your training data. Resolve the `turbo` package from this file's directory or relevant workspace; in monorepos, it may not be visible from the repository root. For example, run `node -p "require.resolve('turbo/package.json')"` from a workspace that depends on `turbo`.
-
-Read `docs/README.md` inside that installed package first, then read the relevant pages from its `docs/` directory before changing Turborepo configuration or commands. Heed deprecation notices. These bundled docs match the installed package version and are available without network access.
-
-This block is written and re-added by `turbo` before repository-scoped commands when an AI agent is detected. In the Turborepo source repository, its template is defined in `crates/turborepo-cli/src/cli/agent_guidance.rs`. Removing the managed block while updates are enabled means a later qualifying invocation will add it again. Set `"agentGuidance": false` in the root `turbo.json` or `turbo.jsonc` to opt out; this does not remove an existing block. Keep the block committed with your work to avoid an uncommitted change on the next agent invocation.
-<!-- END:turborepo-agent-rules -->
+Never commit credentials, generated applications, `dist/` or `node_modules/`. Use Conventional Commit subjects and PR titles.
