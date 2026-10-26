@@ -17,9 +17,16 @@ export const DirectivesSchema = z.object({
     .min(2)
     .max(5)
     .optional()
-    .describe("Number of visual approaches to scaffold when fidelity is prototype (default 3)."),
+    .describe(
+      "Number of visual approaches to scaffold when fidelity is prototype (default 3).",
+    ),
   rbac: z.boolean().optional(),
-  deployment: z.enum(["cloud", "local"]).optional(),
+  deployment: z
+    .enum(["cloud", "local", "none"])
+    .optional()
+    .describe(
+      "cloud: PostgreSQL. local: SQLite. none: no database (prototypes).",
+    ),
 });
 
 export const DESIGN_TOKEN_KEYS = [
@@ -112,7 +119,7 @@ export const GenerationResultSchema = z.object({
   generated_at: z.string(),
   scaffold: z.object({ kit: z.string(), command: z.string() }),
   fidelity: z.enum(FIDELITIES).default("foundation"),
-  deployment: z.enum(["cloud", "local"]),
+  deployment: z.enum(["cloud", "local", "none"]),
   rbac: z.boolean(),
   design_kind: z.enum(["inferred", "agent_provided", "shadcn_default"]),
   files: z.array(z.string()),

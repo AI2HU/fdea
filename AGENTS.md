@@ -9,7 +9,7 @@ Forward Deploy Engineering Anything (FDEA) is an MCP server and CLI that ingest 
 - Fidelity is always asked: `foundation` (production) or `prototype` (lightweight approach gallery).
 - For foundations: RBAC and cloud-or-local are always asked, never defaulted; the derived database schema must be approved before generation.
 - Foundation codegen emits data, HTTP, auth, MCP, design tokens and a thin Vue shell; `UI.md` / `ui_backlog` list the Inertia pages the agent must invent.
-- Prototype codegen emits a thin Adonis + Vue gallery with mock fixtures and approach folders (`PROTOTYPE.md`); no process Lucid models, MCP, or RBAC.
+- Prototype codegen emits a thin Adonis + Vue gallery with mock fixtures and approach folders (`PROTOTYPE.md`); no database, process Lucid models, MCP, or RBAC.
 - Generated foundations are AI-native: they expose an MCP server whose tools reuse the same RBAC permissions as the UI.
 - Every opportunity and process-model element carries a verbatim quote that is verified against the stored source text.
 

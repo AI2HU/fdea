@@ -19,10 +19,7 @@ import {
 } from "./emitData.js";
 import { controllerFile, policyFile, routesFile } from "./emitHttp.js";
 import { mcpFiles } from "./emitMcp.js";
-import {
-  emitPrototype,
-  KIT_FILES_TO_REMOVE_VUE,
-} from "./emitPrototype.js";
+import { emitPrototype, KIT_FILES_TO_REMOVE_VUE } from "./emitPrototype.js";
 import {
   appEntryFile,
   componentsJsonFile,
@@ -214,9 +211,7 @@ const emitFoundation = (input: GenerationInput): GeneratedFile[] => {
 };
 
 export const emitProject = (input: GenerationInput): GeneratedFile[] =>
-  input.fidelity === "prototype"
-    ? emitPrototype(input)
-    : emitFoundation(input);
+  input.fidelity === "prototype" ? emitPrototype(input) : emitFoundation(input);
 
 export const databaseName = (projectName: string): string =>
   snakeCase(projectName) === "" ? "app" : snakeCase(projectName);

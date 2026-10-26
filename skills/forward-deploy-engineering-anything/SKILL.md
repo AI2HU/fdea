@@ -11,10 +11,10 @@ FDEA ingests documentation, ranks the most valuable software opportunities in th
 
 Ask `directive:fidelity` before generating:
 
-| Fidelity | Output | Gates |
-|---|---|---|
-| `foundation` | Production Adonis + Vue foundation (Lucid, auth, optional RBAC, MCP, design tokens, shell). Process pages via `UI.md`. | RBAC, deployment, schema approval |
-| `prototype` | Lightweight Adonis + Vue gallery: mock fixtures, N approach folders, `PROTOTYPE.md`. No process Lucid models, MCP, or RBAC. | Fidelity only (forces local, no RBAC) |
+| Fidelity     | Output                                                                                                                 | Gates                                                |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `foundation` | Production Adonis + Vue foundation (Lucid, auth, optional RBAC, MCP, design tokens, shell). Process pages via `UI.md`. | RBAC, deployment, schema approval                    |
+| `prototype`  | Lightweight Adonis + Vue gallery: mock fixtures, N approach folders, `PROTOTYPE.md`. No database, Lucid, MCP, or RBAC. | Fidelity only (no database; RBAC/deployment ignored) |
 
 Prototypes are for comparing approaches (including lead-magnet style UX). When a winner is chosen, generate a **foundation** into a **new empty directory** — do not promote a prototype in place.
 
@@ -36,7 +36,7 @@ Prototypes are for comparing approaches (including lead-magnet style UX). When a
    - `directive:fidelity`: `foundation` or `prototype`
    - When foundation: `directive:rbac`, `directive:deployment` (`cloud` / `local`), `directive:schema`
 9. `answer_clarifications` with the user's answers. Answers to process questions require you to correct the sources or resubmit the model with `submit_process_model`. Scope uses `select_opportunity`, not `answer_clarifications`.
-10. **Foundation only:** `get_database_schema`, show `schema.summary` to the user, then `approve_database_schema`. Do not generate until they approve. A new process model invalidates approval.
+10. **Foundation only:** `get_database_schema`, show `schema.summary` to the user, then `approve_database_schema`. Do not generate until they approve. A new process model invalidates approval. Prototypes skip schema tools.
 11. `get_design_spec`. If no design source gave tokens and you can derive them from a design image or page, call `submit_design_spec`. Otherwise the shadcn default is used.
 12. Optional: `set_implementation_directives` with `prototype_variants` (2–5, default 3) when fidelity is prototype.
 13. `generate_application`. It refuses until every blocker is resolved; `project_status` lists them.

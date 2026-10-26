@@ -76,21 +76,21 @@ export const TOOL_DESCRIPTIONS: Record<ToolName, ToolDescription> = {
     cli: "questions",
     readOnly: true,
     description:
-      "List the questions that block generation: opportunity priorities, build scope, RBAC, cloud vs local, process gaps and declared unknowns. Ask the user each open question; do not answer for them.",
+      "List the questions that block generation: opportunity priorities, build scope, fidelity, process gaps and declared unknowns. For foundations also RBAC, cloud vs local, and schema approval. Prototypes do not ask cloud vs local or schema. Ask the user each open question; do not answer for them.",
   },
   answer_clarifications: {
     title: "Answer clarifications",
     cli: "answer",
     readOnly: false,
     description:
-      "Record the user's answers by clarification id. Priority answers feed the opportunity ranking. Fidelity, RBAC and deployment answers set the implementation directives. Answers to process questions require resubmitting the process model. Scope uses select_opportunity.",
+      "Record the user's answers by clarification id. Priority answers feed the opportunity ranking. Fidelity answers set directives (prototype forces no database and ignores RBAC/deployment). Foundation RBAC and deployment answers set those directives. Answers to process questions require resubmitting the process model. Scope uses select_opportunity.",
   },
   set_implementation_directives: {
     title: "Set implementation directives",
     cli: "directives",
     readOnly: false,
     description:
-      "Set fidelity (foundation or prototype), optional prototype variant count, whether the application requires RBAC, and cloud (PostgreSQL) or local (SQLite). Prototypes force local SQLite without RBAC.",
+      "Set fidelity (foundation or prototype), optional prototype variant count, whether the application requires RBAC, and cloud (PostgreSQL) or local (SQLite). Prototypes force no database; deployment and RBAC are ignored.",
   },
   get_design_spec: {
     title: "Get the design specification",
@@ -111,21 +111,21 @@ export const TOOL_DESCRIPTIONS: Record<ToolName, ToolDescription> = {
     cli: "schema",
     readOnly: true,
     description:
-      "Return the database schema derived from the process model (tables, columns, foreign keys), including a Mermaid erDiagram and a markdown summary. Show schema.summary (or schema.mermaid in a mermaid fence) to the user so they can see the diagram, then get their approval before generating.",
+      "Foundation only. Return the database schema derived from the process model (tables, columns, foreign keys), including a Mermaid erDiagram and a markdown summary. Show schema.summary to the user, then get their approval before generating. Does not apply when fidelity is prototype.",
   },
   approve_database_schema: {
     title: "Approve the database schema",
     cli: "approve-schema",
     readOnly: false,
     description:
-      "Record whether the user approved the database schema for the current process model. Required before generate_application. A new process model invalidates a previous approval.",
+      "Foundation only. Record whether the user approved the database schema for the current process model. Required before generate_application for foundations. Does not apply when fidelity is prototype. A new process model invalidates a previous approval.",
   },
   generate_application: {
     title: "Generate the application foundation or prototype",
     cli: "generate",
     readOnly: false,
     description:
-      "Generate an AdonisJS + Vue artifact. foundation: Lucid, HTTP, auth, optional RBAC, MCP, design tokens, shell — process pages via UI.md. prototype: lightweight gallery with mock fixtures and approach folders via PROTOTYPE.md (no process Lucid/MCP/RBAC). Refuses until clarifications for the chosen fidelity are settled.",
+      "Generate an AdonisJS + Vue artifact. foundation: Lucid, HTTP, auth, optional RBAC, MCP, design tokens, shell — process pages via UI.md. prototype: lightweight gallery with mock fixtures and approach folders via PROTOTYPE.md (no database, Lucid, MCP, or RBAC). Refuses until clarifications for the chosen fidelity are settled.",
   },
   project_status: {
     title: "Project status",

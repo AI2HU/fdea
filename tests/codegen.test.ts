@@ -102,18 +102,23 @@ describe("emitted application", () => {
 
   it("emits a lightweight Vue prototype gallery without Lucid process models", () => {
     const proto = emitProject(
-      inputFor({ fidelity: "prototype", rbac: false, deployment: "local" }),
+      inputFor({ fidelity: "prototype", rbac: false, deployment: "none" }),
     );
     const paths = proto.map((file) => file.path);
     expect(paths).toContain("PROTOTYPE.md");
     expect(paths).toContain("app/fixtures/process.ts");
     expect(paths).toContain("inertia/pages/approaches/index.vue");
     expect(paths).toContain("inertia/pages/approaches/a/home.vue");
+    expect(paths).toContain("start/kernel.ts");
     expect(paths).not.toContain("UI.md");
+    expect(paths).not.toContain("inertia/pages/auth/login.vue");
+    expect(paths).not.toContain("config/database.ts");
     expect(paths.some((path) => path.startsWith("app/mcp/"))).toBe(false);
     expect(
       paths.some((path) => path.includes("purchase_requests_controller")),
     ).toBe(false);
+    expect(contentsOf(proto, "start/kernel.ts")).not.toContain("auth");
+    expect(contentsOf(proto, "PROTOTYPE.md")).toContain("No database");
   });
 
   it("only registers routes for operations the process performs", () => {

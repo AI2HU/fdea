@@ -600,8 +600,12 @@ export class FdeaService {
         selected_opportunity_id: selected?.id,
         next:
           open.length === 0
-            ? "Show database_schema.summary to the user (Mermaid ER diagram plus table detail), then call approve_database_schema when they confirm."
-            : "Ask the user each open clarification. For directive:schema, call get_database_schema and show the Mermaid summary before approve_database_schema.",
+            ? isPrototype(next)
+              ? "Check project_status, then generate_application."
+              : "Show database_schema.summary to the user (Mermaid ER diagram plus table detail), then call approve_database_schema when they confirm."
+            : isPrototype(next)
+              ? "Ask the user each open clarification."
+              : "Ask the user each open clarification. For directive:schema, call get_database_schema and show the Mermaid summary before approve_database_schema.",
       });
     });
   }
@@ -649,7 +653,7 @@ export class FdeaService {
               ...directives,
               fidelity: value,
               ...(value === "prototype"
-                ? { rbac: false, deployment: "local" as const }
+                ? { rbac: false, deployment: "none" as const }
                 : {}),
             };
           } else issues.push(`${id}: answer foundation or prototype`);
@@ -736,24 +740,28 @@ export class FdeaService {
     ) {
       return err({
         tag: "invalid_input",
-        message: "Provide fidelity, prototype_variants, rbac and/or deployment.",
+        message:
+          "Provide fidelity, prototype_variants, rbac and/or deployment.",
       });
     }
     return this.withProject(input.project_id, async (state) => {
       const fidelity = input.fidelity ?? state.directives.fidelity;
+      const prototype =
+        fidelity === "prototype" || input.fidelity === "prototype";
       const directives = {
         ...state.directives,
         ...(input.fidelity === undefined ? {} : { fidelity: input.fidelity }),
         ...(input.prototype_variants === undefined
           ? {}
           : { prototype_variants: input.prototype_variants }),
-        ...(input.rbac === undefined ? {} : { rbac: input.rbac }),
-        ...(input.deployment === undefined
-          ? {}
-          : { deployment: input.deployment }),
-        ...(fidelity === "prototype" || input.fidelity === "prototype"
-          ? { rbac: false as const, deployment: "local" as const }
-          : {}),
+        ...(prototype
+          ? { rbac: false as const, deployment: "none" as const }
+          : {
+              ...(input.rbac === undefined ? {} : { rbac: input.rbac }),
+              ...(input.deployment === undefined
+                ? {}
+                : { deployment: input.deployment }),
+            }),
       };
       return this.commit({ ...state, directives }, { directives });
     });
@@ -815,6 +823,13 @@ export class FdeaService {
     >
   > {
     return this.withProject(input.project_id, async (state) => {
+      if (isPrototype(state)) {
+        return err({
+          tag: "invalid_input",
+          message:
+            "Database schema does not apply when fidelity is prototype (no database).",
+        });
+      }
       if (state.model === undefined) {
         return err({
           tag: "not_ready",
@@ -854,6 +869,13 @@ export class FdeaService {
     >
   > {
     return this.withProject(input.project_id, async (state) => {
+      if (isPrototype(state)) {
+        return err({
+          tag: "invalid_input",
+          message:
+            "Database schema approval does not apply when fidelity is prototype (no database).",
+        });
+      }
       if (state.model === undefined) {
         return err({
           tag: "not_ready",
@@ -993,7 +1015,7 @@ export class FdeaService {
         fidelity,
         prototypeVariants: prototype_variants ?? 3,
         rbac: prototype ? false : rbac!,
-        deployment: prototype ? "local" : deployment!,
+        deployment: prototype ? "none" : deployment!,
         design: resolveDesign(state),
       });
       if (!generated.ok) return generated;

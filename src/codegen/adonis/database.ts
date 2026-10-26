@@ -84,3 +84,37 @@ export const gitignoreForLocal = (source: string): string =>
 storage/*
 !storage/.gitkeep
 `;
+
+const LUCID_COMMANDS = ", () => import('@adonisjs/lucid/commands')";
+const LUCID_PROVIDER = "  () => import('@adonisjs/lucid/database_provider'),\n";
+const AUTH_PROVIDER = "  () => import('@adonisjs/auth/auth_provider'),\n";
+
+/** Remove Lucid and Auth providers/commands so a prototype boots without a database. */
+export const stripDatabaseFromAdonisRc = (
+  source: string,
+): string | undefined => {
+  if (
+    !source.includes(LUCID_COMMANDS) ||
+    !source.includes(LUCID_PROVIDER) ||
+    !source.includes(AUTH_PROVIDER)
+  ) {
+    return undefined;
+  }
+  return source
+    .replace(LUCID_COMMANDS, "")
+    .replace(LUCID_PROVIDER, "")
+    .replace(AUTH_PROVIDER, "");
+};
+
+const ENV_SCHEMA_DB_BLOCK =
+  /(?:\n\/\*\s*\n\s*\|[^\n]*\n(?:\s*\|[^\n]*\n)*\s*\*\/\s*\n)?(?:\s*\/\/ Database\s*\n)?(?:\s*DB_[A-Z_]+: Env\.schema\.[^\n]+\n)+/;
+
+/** Drop DB_* validations from start/env.ts when present. */
+export const stripDatabaseEnvSchema = (source: string): string =>
+  source.replace(ENV_SCHEMA_DB_BLOCK, "\n");
+
+const ENV_FILE_DB_BLOCK = /(?:^|\n)(?:# Database\n)?(?:DB_[A-Z_]+=[^\n]*\n)+/;
+
+/** Drop DB_* assignments from .env / .env.example when present. */
+export const stripDatabaseEnvFile = (source: string): string =>
+  source.replace(ENV_FILE_DB_BLOCK, "\n").replace(/\n{3,}/g, "\n\n");

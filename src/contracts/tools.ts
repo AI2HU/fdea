@@ -96,16 +96,20 @@ export const TOOL_INPUTS = {
       .min(2)
       .max(5)
       .optional()
-      .describe("How many visual approaches to scaffold for a prototype (default 3)."),
+      .describe(
+        "How many visual approaches to scaffold for a prototype (default 3).",
+      ),
     rbac: z
       .boolean()
       .optional()
-      .describe("Whether the application requires role-based access control."),
+      .describe(
+        "Whether the application requires role-based access control. Ignored when fidelity is prototype.",
+      ),
     deployment: z
       .enum(["cloud", "local"])
       .optional()
       .describe(
-        "cloud: PostgreSQL production deployment. local: SQLite application on one machine.",
+        "cloud: PostgreSQL. local: SQLite on one machine. Ignored when fidelity is prototype (no database).",
       ),
   },
   get_design_spec: { project_id: projectId },

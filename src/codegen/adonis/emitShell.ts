@@ -665,9 +665,7 @@ import FlashToasts from '~/components/flash_toasts.vue'
 </template>
 `;
 
-const loginPage = (
-  title: string,
-): string => `<script setup lang="ts">
+const loginPage = (title: string): string => `<script setup lang="ts">
 import AuthLayout from '~/layouts/auth.vue'
 import { Form } from '@adonisjs/inertia/vue'
 import Button from '~/components/ui/button.vue'

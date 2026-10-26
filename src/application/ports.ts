@@ -9,7 +9,7 @@ export interface GenerationInput {
   readonly fidelity: "foundation" | "prototype";
   readonly prototypeVariants: number;
   readonly rbac: boolean;
-  readonly deployment: "cloud" | "local";
+  readonly deployment: "cloud" | "local" | "none";
   readonly design: DesignSpec;
 }
 

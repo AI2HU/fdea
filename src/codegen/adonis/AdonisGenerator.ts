@@ -25,13 +25,19 @@ import {
   cloudEnvSchema,
   gitignoreForLocal,
   localDatabaseConfig,
+  stripDatabaseEnvFile,
+  stripDatabaseEnvSchema,
+  stripDatabaseFromAdonisRc,
 } from "./database.js";
 import {
   databaseName,
   emitProject,
   KIT_FILES_TO_REMOVE,
 } from "./emitProject.js";
-import { PROTOTYPE_ROUTES } from "./emitPrototype.js";
+import {
+  PROTOTYPE_KIT_FILES_TO_REMOVE,
+  PROTOTYPE_ROUTES,
+} from "./emitPrototype.js";
 import { validatorFieldNames } from "./emitData.js";
 import { MCP_ROUTE } from "./emitHttp.js";
 import { ensureMcpRc } from "./emitMcp.js";
@@ -41,11 +47,7 @@ import type { GeneratedFile } from "./files.js";
 import { SpawnRunner, tail, type CommandRunner } from "./runner.js";
 import { checkToolchain } from "./toolchain.js";
 
-const SCAFFOLD_ARGS = [
-  "--kit=vue",
-  "--pkg=npm",
-  "--skip-migrations",
-] as const;
+const SCAFFOLD_ARGS = ["--kit=vue", "--pkg=npm", "--skip-migrations"] as const;
 const UI_PACKAGES = [
   "tailwindcss",
   "@tailwindcss/vite",
@@ -196,6 +198,11 @@ export class AdonisGenerator implements ApplicationGenerator {
     for (const path of KIT_FILES_TO_REMOVE) {
       await rm(join(outDir, path), { force: true });
     }
+    if (prototype) {
+      for (const path of PROTOTYPE_KIT_FILES_TO_REMOVE) {
+        await rm(join(outDir, path), { force: true });
+      }
+    }
     const plan = buildPlan(input.model);
     const files = emitProject(input);
     await writeAll(outDir, files);
@@ -203,10 +210,7 @@ export class AdonisGenerator implements ApplicationGenerator {
     if (prototype) {
       await ensureFixtureImport(outDir);
       await replaceRoutes(outDir, PROTOTYPE_ROUTES);
-      await this.configureDatabase(
-        { ...input, deployment: "local" },
-        outDir,
-      );
+      await this.stripPrototypeDatabase(outDir);
       await this.exec(
         "codegen",
         outDir,
@@ -214,16 +218,6 @@ export class AdonisGenerator implements ApplicationGenerator {
         ["ace", "codegen"],
         5 * MINUTE,
       );
-      // Kit user migrations only — prototypes emit no process Lucid schema.
-      await this.exec(
-        "migrate",
-        outDir,
-        "node",
-        ["ace", "migration:run"],
-        5 * MINUTE,
-      );
-      await rm(join(outDir, "tmp", "db.sqlite3"), { force: true });
-      await rm(join(outDir, "storage", "db.sqlite3"), { force: true });
     } else {
       await appendFile(
         join(outDir, "start", "validator.ts"),
@@ -260,7 +254,7 @@ export class AdonisGenerator implements ApplicationGenerator {
     const backlog = uiBacklog(plan);
     const limitations = prototype
       ? [
-          "Prototype fidelity: lightweight Adonis + Vue gallery with mock fixtures. No process Lucid models, MCP, or RBAC.",
+          "Prototype fidelity: lightweight Adonis + Vue gallery with mock fixtures. No database, process Lucid models, MCP, or RBAC.",
           "Invent each approach under inertia/pages/approaches/<id>/ from PROTOTYPE.md.",
           "When a winner is chosen, generate a foundation into a new empty directory.",
           "The design font is applied by name; web fonts are not bundled.",
@@ -304,7 +298,7 @@ export class AdonisGenerator implements ApplicationGenerator {
         "--write",
         "app",
         "commands",
-        "database",
+        ...(prototype ? [] : ["database"]),
         "start",
         "inertia",
         "config",
@@ -376,10 +370,7 @@ export class AdonisGenerator implements ApplicationGenerator {
         ...(passed && (prototype || built)
           ? {}
           : {
-              output: tail(
-                passed ? buildOutput : typecheck.output,
-                6000,
-              ),
+              output: tail(passed ? buildOutput : typecheck.output, 6000),
             }),
       },
       limitations,
@@ -396,6 +387,41 @@ export class AdonisGenerator implements ApplicationGenerator {
       );
     }
     await writeFile(rcPath, patched);
+  }
+
+  private async stripPrototypeDatabase(outDir: string): Promise<void> {
+    const rcPath = join(outDir, "adonisrc.ts");
+    const patched = stripDatabaseFromAdonisRc(await readFile(rcPath, "utf8"));
+    if (patched === undefined) {
+      throw new StepFailure(
+        "strip_database",
+        "adonisrc.ts has an unexpected shape when removing Lucid and Auth",
+      );
+    }
+    await writeFile(rcPath, patched);
+
+    await rm(join(outDir, "config", "database.ts"), { force: true });
+    await rm(join(outDir, "database"), { recursive: true, force: true });
+
+    const envSchemaPath = join(outDir, "start", "env.ts");
+    await writeFile(
+      envSchemaPath,
+      stripDatabaseEnvSchema(await readFile(envSchemaPath, "utf8")),
+    );
+    for (const envFile of [".env.example", ".env"]) {
+      const path = join(outDir, envFile);
+      const source = await readFile(path, "utf8").catch(() => undefined);
+      if (source === undefined) continue;
+      await writeFile(path, stripDatabaseEnvFile(source));
+    }
+
+    await this.exec(
+      "remove_database_packages",
+      outDir,
+      "npm",
+      ["uninstall", "--save", "@adonisjs/lucid", "better-sqlite3"],
+      10 * MINUTE,
+    );
   }
 
   private async configureDatabase(
@@ -494,13 +520,16 @@ const ensureFixtureImport = async (outDir: string): Promise<void> => {
   const pkg = JSON.parse(raw) as {
     imports?: Record<string, string>;
   };
-  pkg.imports = {
-    ...(pkg.imports ?? {}),
-    "#fixtures/*": "./app/fixtures/*.js",
-  };
+  const imports = { ...pkg.imports };
+  delete imports["#database/*"];
+  imports["#fixtures/*"] = "./app/fixtures/*.js";
+  pkg.imports = imports;
   await writeFile(packagePath, `${JSON.stringify(pkg, null, 2)}\n`);
 };
 
-const replaceRoutes = async (outDir: string, contents: string): Promise<void> => {
+const replaceRoutes = async (
+  outDir: string,
+  contents: string,
+): Promise<void> => {
   await writeFile(join(outDir, "start", "routes.ts"), contents);
 };

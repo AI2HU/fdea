@@ -199,7 +199,7 @@ describe("clarification gate", () => {
     expect(generated[0]).toMatchObject({
       fidelity: "prototype",
       rbac: false,
-      deployment: "local",
+      deployment: "none",
       prototypeVariants: 3,
     });
   });
