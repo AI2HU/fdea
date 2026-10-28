@@ -1,5 +1,5 @@
 import { referenceOptionsName } from "./emitData.js";
-import { file, type GeneratedFile } from "./files.js";
+import { file, type GeneratedFile } from "../files.js";
 import {
   attribute,
   createFields,

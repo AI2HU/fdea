@@ -4,8 +4,10 @@ import type { OpportunityMap } from "../contracts/opportunityMap.js";
 import type { ProcessModel } from "../contracts/processModel.js";
 import type {
   DesignSpec,
+  Fidelity,
   SourceMeta,
   SourceRole,
+  Stack,
   SubmittedDesign,
 } from "../contracts/project.js";
 import type { ProjectState } from "../contracts/project.js";
@@ -23,10 +25,13 @@ import {
   RBAC_CLARIFICATION_ID,
   SCHEMA_CLARIFICATION_ID,
   SCOPE_CLARIFICATION_ID,
+  STACK_CLARIFICATION_ID,
   deriveClarifications,
-  isPrototype,
   isSchemaApproved,
+  lacksDatabase,
   readinessBlockers,
+  stackOf,
+  updateDirectives,
   type Clarification,
 } from "../process/clarifications.js";
 import {
@@ -600,10 +605,10 @@ export class FdeaService {
         selected_opportunity_id: selected?.id,
         next:
           open.length === 0
-            ? isPrototype(next)
+            ? lacksDatabase(next)
               ? "Check project_status, then generate_application."
               : "Show database_schema.summary to the user (Mermaid ER diagram plus table detail), then call approve_database_schema when they confirm."
-            : isPrototype(next)
+            : lacksDatabase(next)
               ? "Ask the user each open clarification."
               : "Ask the user each open clarification. For directive:schema, call get_database_schema and show the Mermaid summary before approve_database_schema.",
       });
@@ -634,38 +639,35 @@ export class FdeaService {
     >
   > {
     return this.withProject(input.project_id, async (state) => {
-      const known = new Map(
-        deriveClarifications(state).map((item) => [item.id, item]),
-      );
       const issues: string[] = [];
       let directives = state.directives;
       let touchesModel = false;
       for (const { id, answer } of input.answers) {
-        const clarification = known.get(id);
-        if (clarification === undefined) {
+        const known = deriveClarifications({ ...state, directives }).some(
+          (item) => item.id === id,
+        );
+        if (!known) {
           issues.push(`Unknown clarification ${id}`);
           continue;
         }
         const value = answer.trim().toLowerCase();
         if (id === FIDELITY_CLARIFICATION_ID) {
-          if (value === "foundation" || value === "prototype") {
-            directives = {
-              ...directives,
-              fidelity: value,
-              ...(value === "prototype"
-                ? { rbac: false, deployment: "none" as const }
-                : {}),
-            };
-          } else issues.push(`${id}: answer foundation or prototype`);
+          if (value === "foundation" || value === "prototype")
+            directives = updateDirectives(directives, { fidelity: value });
+          else issues.push(`${id}: answer foundation or prototype`);
+        } else if (id === STACK_CLARIFICATION_ID) {
+          if (value === "fullstack" || value === "static")
+            directives = updateDirectives(directives, { stack: value });
+          else issues.push(`${id}: answer fullstack or static`);
         } else if (id === RBAC_CLARIFICATION_ID) {
           if (["true", "yes"].includes(value))
-            directives = { ...directives, rbac: true };
+            directives = updateDirectives(directives, { rbac: true });
           else if (["false", "no"].includes(value))
-            directives = { ...directives, rbac: false };
+            directives = updateDirectives(directives, { rbac: false });
           else issues.push(`${id}: answer true or false`);
         } else if (id === DEPLOYMENT_CLARIFICATION_ID) {
           if (value === "cloud" || value === "local")
-            directives = { ...directives, deployment: value };
+            directives = updateDirectives(directives, { deployment: value });
           else issues.push(`${id}: answer cloud or local`);
         } else if (id === SCHEMA_CLARIFICATION_ID) {
           issues.push(
@@ -727,42 +729,22 @@ export class FdeaService {
 
   async setImplementationDirectives(input: {
     project_id: string;
-    fidelity?: "foundation" | "prototype" | undefined;
+    fidelity?: Fidelity | undefined;
+    stack?: Stack | undefined;
     prototype_variants?: number | undefined;
     rbac?: boolean | undefined;
     deployment?: "cloud" | "local" | undefined;
   }): Promise<Result<{ directives: ProjectState["directives"] }, FdeaError>> {
-    if (
-      input.fidelity === undefined &&
-      input.prototype_variants === undefined &&
-      input.rbac === undefined &&
-      input.deployment === undefined
-    ) {
+    const { project_id: projectId, ...patch } = input;
+    if (Object.values(patch).every((value) => value === undefined)) {
       return err({
         tag: "invalid_input",
         message:
-          "Provide fidelity, prototype_variants, rbac and/or deployment.",
+          "Provide fidelity, stack, prototype_variants, rbac and/or deployment.",
       });
     }
-    return this.withProject(input.project_id, async (state) => {
-      const fidelity = input.fidelity ?? state.directives.fidelity;
-      const prototype =
-        fidelity === "prototype" || input.fidelity === "prototype";
-      const directives = {
-        ...state.directives,
-        ...(input.fidelity === undefined ? {} : { fidelity: input.fidelity }),
-        ...(input.prototype_variants === undefined
-          ? {}
-          : { prototype_variants: input.prototype_variants }),
-        ...(prototype
-          ? { rbac: false as const, deployment: "none" as const }
-          : {
-              ...(input.rbac === undefined ? {} : { rbac: input.rbac }),
-              ...(input.deployment === undefined
-                ? {}
-                : { deployment: input.deployment }),
-            }),
-      };
+    return this.withProject(projectId, async (state) => {
+      const directives = updateDirectives(state.directives, patch);
       return this.commit({ ...state, directives }, { directives });
     });
   }
@@ -823,11 +805,11 @@ export class FdeaService {
     >
   > {
     return this.withProject(input.project_id, async (state) => {
-      if (isPrototype(state)) {
+      if (lacksDatabase(state)) {
         return err({
           tag: "invalid_input",
           message:
-            "Database schema does not apply when fidelity is prototype (no database).",
+            "Database schema does not apply to prototypes or the static stack (no database).",
         });
       }
       if (state.model === undefined) {
@@ -869,11 +851,11 @@ export class FdeaService {
     >
   > {
     return this.withProject(input.project_id, async (state) => {
-      if (isPrototype(state)) {
+      if (lacksDatabase(state)) {
         return err({
           tag: "invalid_input",
           message:
-            "Database schema approval does not apply when fidelity is prototype (no database).",
+            "Database schema approval does not apply to prototypes or the static stack (no database).",
         });
       }
       if (state.model === undefined) {
@@ -994,12 +976,20 @@ export class FdeaService {
       const blockers = readinessBlockers(state);
       const { fidelity, rbac, deployment, prototype_variants } =
         state.directives;
-      const prototype = isPrototype(state);
+      const stack = stackOf(state.directives);
+      const access = lacksDatabase(state)
+        ? { rbac: false, deployment: "none" as const }
+        : rbac === undefined ||
+            deployment === undefined ||
+            deployment === "none"
+          ? undefined
+          : { rbac, deployment };
       if (
         blockers.length > 0 ||
         state.model === undefined ||
         fidelity === undefined ||
-        (!prototype && (rbac === undefined || deployment === undefined))
+        stack === undefined ||
+        access === undefined
       ) {
         return err({
           tag: "not_ready",
@@ -1013,9 +1003,9 @@ export class FdeaService {
         outDir: state.out_dir,
         model: state.model,
         fidelity,
+        stack,
         prototypeVariants: prototype_variants ?? 3,
-        rbac: prototype ? false : rbac!,
-        deployment: prototype ? "none" : deployment!,
+        ...access,
         design: resolveDesign(state),
       });
       if (!generated.ok) return generated;

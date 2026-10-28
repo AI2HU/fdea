@@ -76,21 +76,21 @@ export const TOOL_DESCRIPTIONS: Record<ToolName, ToolDescription> = {
     cli: "questions",
     readOnly: true,
     description:
-      "List the questions that block generation: opportunity priorities, build scope, fidelity, process gaps and declared unknowns. For foundations also RBAC, cloud vs local, and schema approval. Prototypes do not ask cloud vs local or schema. Ask the user each open question; do not answer for them.",
+      "List the questions that block generation: opportunity priorities, build scope, fidelity, process gaps and declared unknowns. Foundations also ask fullstack vs static; fullstack foundations then ask RBAC, cloud vs local, and schema approval. Prototypes and static sites have no database, so they skip those. Ask the user each open question; do not answer for them.",
   },
   answer_clarifications: {
     title: "Answer clarifications",
     cli: "answer",
     readOnly: false,
     description:
-      "Record the user's answers by clarification id. Priority answers feed the opportunity ranking. Fidelity answers set directives (prototype forces no database and ignores RBAC/deployment). Foundation RBAC and deployment answers set those directives. Answers to process questions require resubmitting the process model. Scope uses select_opportunity.",
+      "Record the user's answers by clarification id. Priority answers feed the opportunity ranking. Fidelity and stack answers set directives (prototypes default to the static stack; prototypes and static sites force no database and ignore RBAC/deployment). Fullstack RBAC and deployment answers set those directives. Answers to process questions require resubmitting the process model. Scope uses select_opportunity.",
   },
   set_implementation_directives: {
     title: "Set implementation directives",
     cli: "directives",
     readOnly: false,
     description:
-      "Set fidelity (foundation or prototype), optional prototype variant count, whether the application requires RBAC, and cloud (PostgreSQL) or local (SQLite). Prototypes force no database; deployment and RBAC are ignored.",
+      "Set fidelity (foundation or prototype), stack (fullstack AdonisJS + Vue, or static Astro + Vue), optional prototype variant count, whether the application requires RBAC, and cloud (PostgreSQL) or local (SQLite). Prototypes default to static; pass stack fullstack only when the user wants an Adonis prototype. Prototypes and static sites force no database; deployment and RBAC are ignored.",
   },
   get_design_spec: {
     title: "Get the design specification",
@@ -111,21 +111,21 @@ export const TOOL_DESCRIPTIONS: Record<ToolName, ToolDescription> = {
     cli: "schema",
     readOnly: true,
     description:
-      "Foundation only. Return the database schema derived from the process model (tables, columns, foreign keys), including a Mermaid erDiagram and a markdown summary. Show schema.summary to the user, then get their approval before generating. Does not apply when fidelity is prototype.",
+      "Fullstack foundation only. Return the database schema derived from the process model (tables, columns, foreign keys), including a Mermaid erDiagram and a markdown summary. Show schema.summary to the user, then get their approval before generating. Does not apply to prototypes or the static stack.",
   },
   approve_database_schema: {
     title: "Approve the database schema",
     cli: "approve-schema",
     readOnly: false,
     description:
-      "Foundation only. Record whether the user approved the database schema for the current process model. Required before generate_application for foundations. Does not apply when fidelity is prototype. A new process model invalidates a previous approval.",
+      "Fullstack foundation only. Record whether the user approved the database schema for the current process model. Required before generate_application for fullstack foundations. Does not apply to prototypes or the static stack. A new process model invalidates a previous approval.",
   },
   generate_application: {
     title: "Generate the application foundation or prototype",
     cli: "generate",
     readOnly: false,
     description:
-      "Generate an AdonisJS + Vue artifact. foundation: Lucid, HTTP, auth, optional RBAC, MCP, design tokens, shell — process pages via UI.md. prototype: lightweight gallery with mock fixtures and approach folders via PROTOTYPE.md (no database, Lucid, MCP, or RBAC). Refuses until clarifications for the chosen fidelity are settled.",
+      "Generate a Vue artifact. fullstack foundation: AdonisJS with Lucid, HTTP, auth, optional RBAC, MCP, design tokens, shell — process pages via UI.md. static foundation: Astro static website with typed content collections, design tokens and layout — pages via UI.md (no server, database, auth or MCP). prototype: lightweight gallery with mock fixtures and approach folders via PROTOTYPE.md, on Astro by default. Refuses until clarifications for the chosen fidelity and stack are settled.",
   },
   project_status: {
     title: "Project status",

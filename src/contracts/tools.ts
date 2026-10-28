@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { OpportunityMapSchema } from "./opportunityMap.js";
 import { ProcessModelSchema } from "./processModel.js";
-import { SourceRoleSchema, SubmittedDesignSchema } from "./project.js";
+import { SourceRoleSchema, STACKS, SubmittedDesignSchema } from "./project.js";
 
 const projectId = z
   .string()
@@ -88,7 +88,13 @@ export const TOOL_INPUTS = {
       .enum(["foundation", "prototype"])
       .optional()
       .describe(
-        "foundation: production-ready Adonis app. prototype: lightweight Adonis + Vue approach gallery with mock data.",
+        "foundation: production-ready application. prototype: lightweight Vue approach gallery with mock data.",
+      ),
+    stack: z
+      .enum(STACKS)
+      .optional()
+      .describe(
+        "fullstack: AdonisJS + Vue (database, auth, MCP). static: Astro + Vue static website (no server, database, auth or MCP). Prototypes default to static.",
       ),
     prototype_variants: z
       .number()
@@ -103,13 +109,13 @@ export const TOOL_INPUTS = {
       .boolean()
       .optional()
       .describe(
-        "Whether the application requires role-based access control. Ignored when fidelity is prototype.",
+        "Whether the application requires role-based access control. Ignored for prototypes and the static stack.",
       ),
     deployment: z
       .enum(["cloud", "local"])
       .optional()
       .describe(
-        "cloud: PostgreSQL. local: SQLite on one machine. Ignored when fidelity is prototype (no database).",
+        "cloud: PostgreSQL. local: SQLite on one machine. Ignored for prototypes and the static stack (no database).",
       ),
   },
   get_design_spec: { project_id: projectId },

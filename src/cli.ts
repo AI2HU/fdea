@@ -227,6 +227,7 @@ export const runCli = async (
     .description(describe("set_implementation_directives"))
     .argument("<project_id>")
     .option("--fidelity <kind>", "foundation or prototype")
+    .option("--stack <kind>", "fullstack or static")
     .option("--prototype-variants <n>", "number of prototype approaches (2-5)")
     .option("--rbac", "the application requires RBAC")
     .option("--no-rbac", "the application does not require RBAC")
@@ -236,6 +237,7 @@ export const runCli = async (
         projectId: string,
         options: {
           fidelity?: string;
+          stack?: string;
           prototypeVariants?: string;
           rbac?: boolean;
           deployment?: string;
@@ -248,6 +250,7 @@ export const runCli = async (
             ...(options.fidelity === undefined
               ? {}
               : { fidelity: options.fidelity }),
+            ...(options.stack === undefined ? {} : { stack: options.stack }),
             ...(options.prototypeVariants === undefined
               ? {}
               : {

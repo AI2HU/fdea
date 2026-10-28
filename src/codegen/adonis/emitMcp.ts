@@ -1,6 +1,6 @@
 import type { Field } from "../../contracts/processModel.js";
 import { camelCase, pascalCase } from "../../process/naming.js";
-import { file, quote, type GeneratedFile } from "./files.js";
+import { file, quote, type GeneratedFile } from "../files.js";
 import {
   attribute,
   createFields,

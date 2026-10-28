@@ -1,5 +1,5 @@
 import type { DesignTokens } from "../../contracts/project.js";
-import { file, quote, type GeneratedFile } from "./files.js";
+import { file, quote, type GeneratedFile } from "../files.js";
 import {
   crudPermission,
   type EntityPlan,
@@ -7,9 +7,10 @@ import {
 } from "./plan.js";
 
 export const cssFile = (tokens: DesignTokens): GeneratedFile =>
-  file(
-    "inertia/css/app.css",
-    `@import 'tailwindcss';
+  file("inertia/css/app.css", themeCss(tokens));
+
+export const themeCss = (tokens: DesignTokens): string =>
+  `@import 'tailwindcss';
 
 @theme inline {
   --color-background: var(--background);
@@ -69,8 +70,7 @@ export const cssFile = (tokens: DesignTokens): GeneratedFile =>
     @apply bg-background text-foreground font-sans antialiased;
   }
 }
-`,
-  );
+`;
 
 export const componentsJsonFile = (): GeneratedFile =>
   file(
@@ -877,33 +877,38 @@ const visible = computed(() => areas.filter((area) => can(area.permission)))
 `;
 };
 
+/** Framework-agnostic Vue primitives; `root` is the directory `~/` resolves to. */
+export const vuePrimitiveFiles = (root: string): GeneratedFile[] => [
+  file(`${root}/lib/utils.ts`, UTILS),
+  file(`${root}/lib/format.ts`, FORMAT),
+  file(`${root}/components/ui/button.vue`, BUTTON),
+  file(`${root}/components/ui/button_variants.ts`, BUTTON_VARIANTS),
+  file(`${root}/components/ui/input.vue`, INPUT),
+  file(`${root}/components/ui/textarea.vue`, TEXTAREA),
+  file(`${root}/components/ui/label.vue`, LABEL),
+  file(`${root}/components/ui/select.vue`, SELECT),
+  file(`${root}/components/ui/card.vue`, CARD),
+  file(`${root}/components/ui/card_header.vue`, CARD_HEADER),
+  file(`${root}/components/ui/card_title.vue`, CARD_TITLE),
+  file(`${root}/components/ui/card_description.vue`, CARD_DESCRIPTION),
+  file(`${root}/components/ui/card_content.vue`, CARD_CONTENT),
+  file(`${root}/components/ui/table.vue`, TABLE),
+  file(`${root}/components/ui/table_header.vue`, TABLE_HEADER),
+  file(`${root}/components/ui/table_body.vue`, TABLE_BODY),
+  file(`${root}/components/ui/table_row.vue`, TABLE_ROW),
+  file(`${root}/components/ui/table_head.vue`, TABLE_HEAD),
+  file(`${root}/components/ui/table_cell.vue`, TABLE_CELL),
+  file(`${root}/components/ui/badge.vue`, BADGE),
+  file(`${root}/components/form_field.vue`, FORM_FIELD),
+];
+
 export const shellFiles = (
   title: string,
   summary: string,
   plan: GenerationPlan,
   rbac: boolean,
 ): GeneratedFile[] => [
-  file("inertia/lib/utils.ts", UTILS),
-  file("inertia/lib/format.ts", FORMAT),
-  file("inertia/components/ui/button.vue", BUTTON),
-  file("inertia/components/ui/button_variants.ts", BUTTON_VARIANTS),
-  file("inertia/components/ui/input.vue", INPUT),
-  file("inertia/components/ui/textarea.vue", TEXTAREA),
-  file("inertia/components/ui/label.vue", LABEL),
-  file("inertia/components/ui/select.vue", SELECT),
-  file("inertia/components/ui/card.vue", CARD),
-  file("inertia/components/ui/card_header.vue", CARD_HEADER),
-  file("inertia/components/ui/card_title.vue", CARD_TITLE),
-  file("inertia/components/ui/card_description.vue", CARD_DESCRIPTION),
-  file("inertia/components/ui/card_content.vue", CARD_CONTENT),
-  file("inertia/components/ui/table.vue", TABLE),
-  file("inertia/components/ui/table_header.vue", TABLE_HEADER),
-  file("inertia/components/ui/table_body.vue", TABLE_BODY),
-  file("inertia/components/ui/table_row.vue", TABLE_ROW),
-  file("inertia/components/ui/table_head.vue", TABLE_HEAD),
-  file("inertia/components/ui/table_cell.vue", TABLE_CELL),
-  file("inertia/components/ui/badge.vue", BADGE),
-  file("inertia/components/form_field.vue", FORM_FIELD),
+  ...vuePrimitiveFiles("inertia"),
   file("inertia/components/page_header.vue", PAGE_HEADER),
   file("inertia/components/flash_toasts.vue", FLASH_TOASTS),
   file("inertia/layouts/auth.vue", AUTH_LAYOUT),

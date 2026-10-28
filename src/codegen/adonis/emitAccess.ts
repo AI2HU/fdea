@@ -1,4 +1,4 @@
-import { file, quote, type GeneratedFile } from "./files.js";
+import { file, quote, type GeneratedFile } from "../files.js";
 import type { GenerationPlan } from "./plan.js";
 
 export const ACCESS_MIGRATION_BASE = 1_800_000_000_000;

@@ -5,11 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { GenerationInput } from "../src/application/ports.js";
 import { AdonisGenerator } from "../src/codegen/adonis/AdonisGenerator.js";
 import { emitProject } from "../src/codegen/adonis/emitProject.js";
-import type {
-  CommandResult,
-  CommandRunner,
-} from "../src/codegen/adonis/runner.js";
-import { atLeast } from "../src/codegen/adonis/toolchain.js";
+import type { CommandResult, CommandRunner } from "../src/codegen/runner.js";
+import { atLeast } from "../src/codegen/toolchain.js";
 import { SHADCN_DEFAULT_TOKENS } from "../src/design/infer.js";
 import { purchaseModel } from "./fixtures.js";
 
@@ -30,6 +27,7 @@ const inputFor = (
   outDir: overrides.outDir ?? join(root, "out"),
   model: purchaseModel("src_01"),
   fidelity: "foundation",
+  stack: "fullstack",
   prototypeVariants: 3,
   rbac: true,
   deployment: "cloud",

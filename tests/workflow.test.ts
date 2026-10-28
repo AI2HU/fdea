@@ -28,6 +28,7 @@ const generator: ApplicationGenerator = {
       generated_at: "2026-01-01T00:00:00.000Z",
       scaffold: { kit: "fake", command: "fake" },
       fidelity: input.fidelity,
+      stack: input.stack,
       deployment: input.deployment,
       rbac: input.rbac,
       design_kind: input.design.kind,
@@ -131,7 +132,10 @@ describe("clarification gate", () => {
 
     await call("answer_clarifications", {
       project_id: projectId,
-      answers: [{ id: "directive:fidelity", answer: "foundation" }],
+      answers: [
+        { id: "directive:fidelity", answer: "foundation" },
+        { id: "directive:stack", answer: "fullstack" },
+      ],
     });
     const rbacBlocked = await failure("generate_application", {
       project_id: projectId,
@@ -176,6 +180,7 @@ describe("clarification gate", () => {
     expect(generated).toHaveLength(1);
     expect(generated[0]).toMatchObject({
       fidelity: "foundation",
+      stack: "fullstack",
       rbac: true,
       deployment: "cloud",
       projectName: "Buy Desk",
@@ -198,6 +203,7 @@ describe("clarification gate", () => {
     expect(generated).toHaveLength(1);
     expect(generated[0]).toMatchObject({
       fidelity: "prototype",
+      stack: "static",
       rbac: false,
       deployment: "none",
       prototypeVariants: 3,
@@ -288,7 +294,10 @@ describe("clarification gate", () => {
 
     await call("answer_clarifications", {
       project_id: projectId,
-      answers: [{ id: "directive:fidelity", answer: "foundation" }],
+      answers: [
+        { id: "directive:fidelity", answer: "foundation" },
+        { id: "directive:stack", answer: "fullstack" },
+      ],
     });
     const after = await call("list_clarifications", { project_id: projectId });
     const afterIds = (after["clarifications"] as Array<{ id: string }>).map(

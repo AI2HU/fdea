@@ -28,7 +28,7 @@ import {
   viteConfigFile,
 } from "./emitShell.js";
 import { uiContractFile } from "./emitUi.js";
-import { file, type GeneratedFile } from "./files.js";
+import { file, type GeneratedFile } from "../files.js";
 import { buildPlan, type GenerationPlan } from "./plan.js";
 
 const ENTITY_MIGRATION_BASE = 1_790_000_000_000;

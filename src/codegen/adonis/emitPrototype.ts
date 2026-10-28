@@ -8,7 +8,7 @@ import {
   viteConfigFile,
 } from "./emitShell.js";
 import { uiBacklog } from "./emitUi.js";
-import { file, quote, type GeneratedFile } from "./files.js";
+import { file, quote, type GeneratedFile } from "../files.js";
 import {
   attribute,
   buildPlan,
@@ -87,22 +87,22 @@ const fixtureRow = (
   return row;
 };
 
-const fixturesModule = (plan: GenerationPlan): GeneratedFile => {
+export const fixturesSource = (plan: GenerationPlan): string => {
   const payload: Record<string, unknown[]> = {};
   for (const entity of plan.entities) {
     payload[entity.names.pluralVar] = [0, 1, 2].map((index) =>
       fixtureRow(entity, index),
     );
   }
-  return file(
-    "app/fixtures/process.ts",
-    `/** Mock rows for prototype screens. Not persisted. */
+  return `/** Mock rows for prototype screens. Not persisted. */
 export const fixtures = ${JSON.stringify(payload, null, 2)} as const
 
 export type Fixtures = typeof fixtures
-`,
-  );
+`;
 };
+
+const fixturesModule = (plan: GenerationPlan): GeneratedFile =>
+  file("app/fixtures/process.ts", fixturesSource(plan));
 
 const escapeHtml = (value: string): string =>
   value
@@ -134,7 +134,7 @@ const inertiaLayout = (title: string): GeneratedFile =>
 </html>`,
   );
 
-const approachHypotheses = (
+export const approachHypotheses = (
   variants: readonly string[],
 ): Record<string, string> => {
   const defaults: Record<string, string> = {

@@ -1,9 +1,10 @@
-import type { ProjectState } from "../contracts/project.js";
+import type { Directives, ProjectState, Stack } from "../contracts/project.js";
 import { isScopeSelected, priorityClarificationId } from "./opportunity.js";
 import { completenessGaps } from "./validate.js";
 
 export type ClarificationKind =
   | "directive_fidelity"
+  | "directive_stack"
   | "directive_rbac"
   | "directive_deployment"
   | "directive_scope"
@@ -23,6 +24,7 @@ export interface Clarification {
 }
 
 export const FIDELITY_CLARIFICATION_ID = "directive:fidelity";
+export const STACK_CLARIFICATION_ID = "directive:stack";
 export const RBAC_CLARIFICATION_ID = "directive:rbac";
 export const DEPLOYMENT_CLARIFICATION_ID = "directive:deployment";
 export const SCOPE_CLARIFICATION_ID = "directive:scope";
@@ -33,8 +35,69 @@ export const isSchemaApproved = (state: ProjectState): boolean =>
   state.schema_approval !== undefined &&
   state.schema_approval.model_seq === state.model_seq;
 
-export const isPrototype = (state: ProjectState): boolean =>
-  state.directives.fidelity === "prototype";
+/** Only fullstack foundations have a database, RBAC and a deployment target. */
+const usesDatabase = (directives: Directives): boolean =>
+  directives.fidelity === "foundation" && directives.stack === "fullstack";
+
+export const lacksDatabase = (state: ProjectState): boolean =>
+  state.directives.fidelity === "prototype" ||
+  state.directives.stack === "static";
+
+export const stackOf = (directives: Directives): Stack | undefined =>
+  directives.stack ??
+  (directives.fidelity === "prototype" ? "static" : undefined);
+
+export type DirectivesPatch = {
+  readonly [K in keyof Directives]?: Directives[K] | undefined;
+};
+
+/**
+ * Prototypes default to the static stack. Directives that only make sense with
+ * a database are forced off without one, and asked again when one comes back.
+ */
+export const updateDirectives = (
+  current: Directives,
+  patch: DirectivesPatch,
+): Directives => {
+  const fidelity = patch.fidelity ?? current.fidelity;
+  const fidelityChanged =
+    patch.fidelity !== undefined && patch.fidelity !== current.fidelity;
+  const stack =
+    patch.stack ??
+    (fidelityChanged ? undefined : current.stack) ??
+    (fidelity === "prototype" ? "static" : undefined);
+  const prototypeVariants =
+    patch.prototype_variants ?? current.prototype_variants;
+  const next: Directives = {
+    ...(fidelity === undefined ? {} : { fidelity }),
+    ...(stack === undefined ? {} : { stack }),
+    ...(prototypeVariants === undefined
+      ? {}
+      : { prototype_variants: prototypeVariants }),
+  };
+  if (fidelity === "prototype" || stack === "static") {
+    return { ...next, rbac: false, deployment: "none" };
+  }
+  const carried = current.deployment !== "none";
+  const rbac = patch.rbac ?? (carried ? current.rbac : undefined);
+  const deployment =
+    patch.deployment ?? (carried ? current.deployment : undefined);
+  return {
+    ...next,
+    ...(rbac === undefined ? {} : { rbac }),
+    ...(deployment === undefined || deployment === "none"
+      ? {}
+      : { deployment }),
+  };
+};
+
+const directiveClarification = (
+  base: Omit<Clarification, "status" | "answer">,
+  answer: string | undefined,
+): Clarification =>
+  answer === undefined
+    ? { ...base, status: "open" }
+    : { ...base, status: "answered", answer };
 
 const latestAnswer = (state: ProjectState, id: string): string | undefined => {
   let latest: { answer: string; seq: number } | undefined;
@@ -60,66 +123,56 @@ const withStatus = (
 };
 
 export const deriveClarifications = (state: ProjectState): Clarification[] => {
-  const { fidelity, rbac, deployment } = state.directives;
+  const { fidelity, stack, rbac, deployment } = state.directives;
   const result: Clarification[] = [
-    fidelity === undefined
-      ? {
-          id: FIDELITY_CLARIFICATION_ID,
-          kind: "directive_fidelity",
-          question:
-            "Generate a production foundation, or a lightweight Vue prototype gallery to compare approaches?",
-          options: ["foundation", "prototype"],
-          status: "open",
-        }
-      : {
-          id: FIDELITY_CLARIFICATION_ID,
-          kind: "directive_fidelity",
-          question:
-            "Generate a production foundation, or a lightweight Vue prototype gallery to compare approaches?",
-          options: ["foundation", "prototype"],
-          status: "answered",
-          answer: fidelity,
-        },
+    directiveClarification(
+      {
+        id: FIDELITY_CLARIFICATION_ID,
+        kind: "directive_fidelity",
+        question:
+          "Generate a production foundation, or a lightweight Vue prototype gallery (static Astro site) to compare approaches?",
+        options: ["foundation", "prototype"],
+      },
+      fidelity,
+    ),
   ];
 
   if (fidelity === "foundation") {
     result.push(
-      rbac === undefined
-        ? {
-            id: RBAC_CLARIFICATION_ID,
-            kind: "directive_rbac",
-            question:
-              "Will the application require role-based access control (RBAC)?",
-            options: ["true", "false"],
-            status: "open",
-          }
-        : {
-            id: RBAC_CLARIFICATION_ID,
-            kind: "directive_rbac",
-            question:
-              "Will the application require role-based access control (RBAC)?",
-            options: ["true", "false"],
-            status: "answered",
-            answer: String(rbac),
-          },
-      deployment === undefined
-        ? {
-            id: DEPLOYMENT_CLARIFICATION_ID,
-            kind: "directive_deployment",
-            question:
-              "Will this be a cloud application or a local application?",
-            options: ["cloud", "local"],
-            status: "open",
-          }
-        : {
-            id: DEPLOYMENT_CLARIFICATION_ID,
-            kind: "directive_deployment",
-            question:
-              "Will this be a cloud application or a local application?",
-            options: ["cloud", "local"],
-            status: "answered",
-            answer: deployment,
-          },
+      directiveClarification(
+        {
+          id: STACK_CLARIFICATION_ID,
+          kind: "directive_stack",
+          question:
+            "Build a fullstack application (AdonisJS + Vue with database, auth and MCP) or a static website (Astro + Vue, content in files, no server)?",
+          options: ["fullstack", "static"],
+        },
+        stack,
+      ),
+    );
+  }
+
+  if (usesDatabase(state.directives)) {
+    result.push(
+      directiveClarification(
+        {
+          id: RBAC_CLARIFICATION_ID,
+          kind: "directive_rbac",
+          question:
+            "Will the application require role-based access control (RBAC)?",
+          options: ["true", "false"],
+        },
+        rbac === undefined ? undefined : String(rbac),
+      ),
+      directiveClarification(
+        {
+          id: DEPLOYMENT_CLARIFICATION_ID,
+          kind: "directive_deployment",
+          question: "Will this be a cloud application or a local application?",
+          options: ["cloud", "local"],
+        },
+        deployment === "none" ? undefined : deployment,
+      ),
     );
   }
 
@@ -164,26 +217,18 @@ export const deriveClarifications = (state: ProjectState): Clarification[] => {
   const model = state.model;
   if (model === undefined) return result;
 
-  if (fidelity === "foundation") {
+  if (usesDatabase(state.directives)) {
     result.push(
-      isSchemaApproved(state)
-        ? {
-            id: SCHEMA_CLARIFICATION_ID,
-            kind: "directive_schema",
-            question:
-              "Does the database schema correctly represent the process? Call get_database_schema, show the Mermaid ER diagram (schema.summary) to the user, and record their approval with approve_database_schema before generating.",
-            options: ["approved", "rejected"],
-            status: "answered",
-            answer: "approved",
-          }
-        : {
-            id: SCHEMA_CLARIFICATION_ID,
-            kind: "directive_schema",
-            question:
-              "Does the database schema correctly represent the process? Call get_database_schema, show the Mermaid ER diagram (schema.summary) to the user, and record their approval with approve_database_schema before generating.",
-            options: ["approved", "rejected"],
-            status: "open",
-          },
+      directiveClarification(
+        {
+          id: SCHEMA_CLARIFICATION_ID,
+          kind: "directive_schema",
+          question:
+            "Does the database schema correctly represent the process? Call get_database_schema, show the Mermaid ER diagram (schema.summary) to the user, and record their approval with approve_database_schema before generating.",
+          options: ["approved", "rejected"],
+        },
+        isSchemaApproved(state) ? "approved" : undefined,
+      ),
     );
   }
 

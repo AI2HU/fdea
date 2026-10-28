@@ -1,24 +1,19 @@
-import {
-  appendFile,
-  mkdir,
-  readdir,
-  readFile,
-  rm,
-  writeFile,
-} from "node:fs/promises";
-import { dirname, basename, join, resolve } from "node:path";
+import { appendFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { dirname, basename, join } from "node:path";
 import type {
   ApplicationGenerator,
   GenerationInput,
 } from "../../application/ports.js";
 import type { GenerationResult } from "../../contracts/project.js";
+import type { FdeaError, Result } from "../../domain/result.js";
+import { SpawnRunner, tail, type CommandRunner } from "../runner.js";
 import {
-  err,
-  messageOf,
-  ok,
-  type FdeaError,
-  type Result,
-} from "../../domain/result.js";
+  execStep,
+  generateInto,
+  MINUTE,
+  StepFailure,
+  writeAll,
+} from "../workspace.js";
 import {
   cloudDatabaseConfig,
   cloudEnvFile,
@@ -43,9 +38,6 @@ import { MCP_ROUTE } from "./emitHttp.js";
 import { ensureMcpRc } from "./emitMcp.js";
 import { uiBacklog } from "./emitUi.js";
 import { buildPlan } from "./plan.js";
-import type { GeneratedFile } from "./files.js";
-import { SpawnRunner, tail, type CommandRunner } from "./runner.js";
-import { checkToolchain } from "./toolchain.js";
 
 const SCAFFOLD_ARGS = ["--kit=vue", "--pkg=npm", "--skip-migrations"] as const;
 const UI_PACKAGES = [
@@ -55,18 +47,6 @@ const UI_PACKAGES = [
   "tailwind-merge",
   "class-variance-authority",
 ] as const;
-
-const MINUTE = 60_000;
-
-class StepFailure extends Error {
-  constructor(
-    readonly step: string,
-    message: string,
-    readonly output?: string,
-  ) {
-    super(message);
-  }
-}
 
 export interface AdonisGeneratorOptions {
   readonly runner?: CommandRunner;
@@ -82,73 +62,25 @@ export class AdonisGenerator implements ApplicationGenerator {
     this.nodeVersion = options.nodeVersion;
   }
 
-  async generate(
+  generate(
     input: GenerationInput,
   ): Promise<Result<GenerationResult, FdeaError>> {
-    const outDir = resolve(input.outDir);
-    const parent = dirname(outDir);
-    await mkdir(parent, { recursive: true }).catch(() => undefined);
-
-    const toolchain = await checkToolchain(
+    return generateInto(
       this.runner,
-      parent,
       this.nodeVersion ?? process.versions.node,
+      input.outDir,
+      (outDir) => this.run(input, outDir),
     );
-    if (!toolchain.ok) return toolchain;
-
-    const state = await outputState(outDir);
-    if (state === "occupied") {
-      return err({
-        tag: "output_not_empty",
-        message: `The output directory ${outDir} exists and is not empty. Choose an empty or new directory.`,
-      });
-    }
-    if (state === "unreadable") {
-      return err({
-        tag: "storage_failure",
-        message: `The output directory ${outDir} cannot be inspected.`,
-      });
-    }
-    await mkdir(outDir, { recursive: true });
-
-    try {
-      return ok(await this.run(input, outDir));
-    } catch (cause) {
-      await rm(outDir, { recursive: true, force: true }).catch(() => undefined);
-      if (cause instanceof StepFailure) {
-        return err({
-          tag: "generation_failed",
-          step: cause.step,
-          message: `${cause.step} failed: ${cause.message}. The partial output was removed.`,
-          ...(cause.output === undefined ? {} : { output: cause.output }),
-        });
-      }
-      return err({
-        tag: "generation_failed",
-        step: "unknown",
-        message: messageOf(cause),
-      });
-    }
   }
 
-  private async exec(
+  private exec(
     step: string,
     cwd: string,
     command: string,
     args: readonly string[],
     timeoutMs: number,
   ): Promise<string> {
-    const result = await this.runner.run(command, args, { cwd, timeoutMs });
-    if (result.timedOut)
-      throw new StepFailure(step, "timed out", result.output);
-    if (result.code !== 0) {
-      throw new StepFailure(
-        step,
-        `exit code ${result.code ?? "none"}`,
-        result.output,
-      );
-    }
-    return result.output;
+    return execStep(this.runner, step, cwd, command, args, timeoutMs);
   }
 
   private async run(
@@ -351,6 +283,7 @@ export class AdonisGenerator implements ApplicationGenerator {
         command: `npm ${scaffoldArgs.join(" ")}`,
       },
       fidelity: input.fidelity,
+      stack: "fullstack",
       deployment: input.deployment,
       rbac: input.rbac,
       design_kind: input.design.kind,
@@ -490,29 +423,6 @@ export class AdonisGenerator implements ApplicationGenerator {
     );
   }
 }
-
-const outputState = async (
-  outDir: string,
-): Promise<"absent" | "empty" | "occupied" | "unreadable"> => {
-  try {
-    const entries = await readdir(outDir);
-    return entries.length === 0 ? "empty" : "occupied";
-  } catch (cause) {
-    const code = (cause as NodeJS.ErrnoException).code;
-    return code === "ENOENT" ? "absent" : "unreadable";
-  }
-};
-
-const writeAll = async (
-  outDir: string,
-  files: readonly GeneratedFile[],
-): Promise<void> => {
-  for (const generated of files) {
-    const target = join(outDir, generated.path);
-    await mkdir(dirname(target), { recursive: true });
-    await writeFile(target, generated.contents);
-  }
-};
 
 const ensureFixtureImport = async (outDir: string): Promise<void> => {
   const packagePath = join(outDir, "package.json");

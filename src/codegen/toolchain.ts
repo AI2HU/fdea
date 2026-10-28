@@ -1,4 +1,4 @@
-import { err, ok, type FdeaError, type Result } from "../../domain/result.js";
+import { err, ok, type FdeaError, type Result } from "../domain/result.js";
 import type { CommandRunner } from "./runner.js";
 
 export const MIN_NODE = [24, 11, 0] as const;
@@ -38,7 +38,7 @@ export const checkToolchain = async (
   if (!atLeast(nodeVersion, MIN_NODE)) {
     return err({
       tag: "toolchain_unsupported",
-      message: `Node.js ${MIN_NODE.join(".")} or newer is required to generate an AdonisJS 7 application; found ${nodeVersion}.`,
+      message: `Node.js ${MIN_NODE.join(".")} or newer is required to generate an application; found ${nodeVersion}.`,
     });
   }
   const npm = await runner.run("npm", ["--version"], {

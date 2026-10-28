@@ -3,8 +3,8 @@ import { access } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
-import { checkToolchain } from "../codegen/adonis/toolchain.js";
-import { SpawnRunner } from "../codegen/adonis/runner.js";
+import { checkToolchain } from "../codegen/toolchain.js";
+import { SpawnRunner } from "../codegen/runner.js";
 import { PRODUCT_IDENTITY } from "../identity.js";
 import {
   clientSpecs,

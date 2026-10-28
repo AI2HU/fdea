@@ -3,13 +3,20 @@ import { OpportunityMapSchema } from "./opportunityMap.js";
 import { ProcessModelSchema } from "./processModel.js";
 
 export const FIDELITIES = ["foundation", "prototype"] as const;
+export const STACKS = ["fullstack", "static"] as const;
 
 export const DirectivesSchema = z.object({
   fidelity: z
     .enum(FIDELITIES)
     .optional()
     .describe(
-      "foundation: production Adonis app. prototype: lightweight Adonis + Vue gallery with mock data.",
+      "foundation: production application. prototype: lightweight Vue gallery with mock data.",
+    ),
+  stack: z
+    .enum(STACKS)
+    .optional()
+    .describe(
+      "fullstack: AdonisJS + Vue with database, auth and MCP. static: Astro + Vue static website. Prototypes default to static.",
     ),
   prototype_variants: z
     .number()
@@ -119,6 +126,7 @@ export const GenerationResultSchema = z.object({
   generated_at: z.string(),
   scaffold: z.object({ kit: z.string(), command: z.string() }),
   fidelity: z.enum(FIDELITIES).default("foundation"),
+  stack: z.enum(STACKS).default("fullstack"),
   deployment: z.enum(["cloud", "local", "none"]),
   rbac: z.boolean(),
   design_kind: z.enum(["inferred", "agent_provided", "shadcn_default"]),
@@ -180,6 +188,8 @@ export const ProjectStateSchema = z.object({
 });
 
 export type Directives = z.infer<typeof DirectivesSchema>;
+export type Fidelity = (typeof FIDELITIES)[number];
+export type Stack = (typeof STACKS)[number];
 export type DesignTokens = z.infer<typeof DesignTokensSchema>;
 export type DesignSpec = z.infer<typeof DesignSpecSchema>;
 export type SubmittedDesign = z.infer<typeof SubmittedDesignSchema>;
