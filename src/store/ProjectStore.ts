@@ -36,6 +36,7 @@ export class ProjectStore {
   async create(
     name: string,
     outDir: string,
+    skipPain = false,
   ): Promise<Result<ProjectState, FdeaError>> {
     const id = `prj_${randomBytes(4).toString("hex")}`;
     const state: ProjectState = {
@@ -43,6 +44,7 @@ export class ProjectStore {
       id,
       name,
       out_dir: outDir,
+      skip_pain: skipPain,
       created_at: new Date().toISOString(),
       seq: 0,
       directives: {},

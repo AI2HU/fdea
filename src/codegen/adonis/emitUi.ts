@@ -148,6 +148,7 @@ export const uiContractFile = (
   title: string,
   plan: GenerationPlan,
   rbac: boolean,
+  mock: boolean,
 ): GeneratedFile => {
   const backlog = uiBacklog(plan);
   const pages =
@@ -180,7 +181,15 @@ Create every page listed below under \`inertia/pages/\`. Controllers already cal
 ## Backlog
 
 ${pages}
+${
+  mock
+    ? `
+## Mock data
 
+This is a prototype: the database holds mock records only, loaded by \`node ace db:seed\` from \`database/seeders/mock_data_seeder.ts\`. They are fictional; present them as such.
+`
+    : ""
+}
 ## Shared foundation
 
 - Design tokens: \`inertia/css/app.css\`

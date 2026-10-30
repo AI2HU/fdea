@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { isAbsolute } from "node:path";
+import type { MockData } from "../contracts/mockData.js";
 import type { OpportunityMap } from "../contracts/opportunityMap.js";
 import type { ProcessModel } from "../contracts/processModel.js";
 import type {
@@ -30,7 +31,6 @@ import {
   isSchemaApproved,
   lacksDatabase,
   readinessBlockers,
-  stackOf,
   updateDirectives,
   type Clarification,
 } from "../process/clarifications.js";
@@ -42,6 +42,7 @@ import {
   rankingSummary,
   selectedOpportunity,
 } from "../process/opportunity.js";
+import { mockDataIssues } from "../process/mockData.js";
 import { buildDatabaseSchemaPreview } from "../process/schemaPreview.js";
 import { integrityIssues, type EvidenceVerifier } from "../process/validate.js";
 import type { ProjectStore } from "../store/ProjectStore.js";
@@ -57,6 +58,11 @@ export interface FdeaServiceDeps {
 
 const normalize = (text: string): string =>
   text.toLowerCase().replace(/\s+/g, " ").trim();
+
+const mockHint = (state: ProjectState): string =>
+  state.directives.fidelity === "prototype" && state.mock_data === undefined
+    ? "Derive mock data for every entity from the context of the sources and call submit_mock_data. "
+    : "";
 
 const IMAGE_EXTENSIONS: Record<string, string> = {
   png: "png",
@@ -126,9 +132,16 @@ export class FdeaService {
   async createProject(input: {
     name: string;
     out_dir: string;
+    skip_pain?: boolean | undefined;
   }): Promise<
     Result<
-      { project_id: string; name: string; out_dir: string; next: string },
+      {
+        project_id: string;
+        name: string;
+        out_dir: string;
+        skip_pain: boolean;
+        next: string;
+      },
       FdeaError
     >
   > {
@@ -138,14 +151,31 @@ export class FdeaService {
         message: "out_dir must be an absolute path.",
       });
     }
-    const created = await this.deps.store.create(input.name, input.out_dir);
+    const skipPain = input.skip_pain === true;
+    const created = await this.deps.store.create(
+      input.name,
+      input.out_dir,
+      skipPain,
+    );
     if (!created.ok) return created;
     return ok({
       project_id: created.value.id,
       name: created.value.name,
       out_dir: created.value.out_dir,
-      next: "Ingest the process documentation with ingest_source, then submit_opportunity_map before modeling.",
+      skip_pain: created.value.skip_pain,
+      next: skipPain
+        ? "Ingest the documentation with ingest_source, read it, then submit_process_model for everything those sources ask to build, as asked. Do not analyze pains or submit an opportunity map."
+        : "Ingest the process documentation with ingest_source, then submit_opportunity_map before modeling.",
     });
+  }
+
+  private painAnalysisSkipped(state: ProjectState): FdeaError | undefined {
+    if (!state.skip_pain) return undefined;
+    return {
+      tag: "invalid_input",
+      message:
+        "This project skips pain analysis. Submit a process model for what the sources ask to build.",
+    };
   }
 
   async ingestSource(input: {
@@ -367,6 +397,8 @@ export class FdeaService {
     >
   > {
     return this.withProject(input.project_id, async (state) => {
+      const skipped = this.painAnalysisSkipped(state);
+      if (skipped !== undefined) return err(skipped);
       if (
         state.sources.filter((source) => source.role === "process").length === 0
       ) {
@@ -426,6 +458,8 @@ export class FdeaService {
     >
   > {
     return this.withProject(input.project_id, async (state) => {
+      const skipped = this.painAnalysisSkipped(state);
+      if (skipped !== undefined) return err(skipped);
       if (state.opportunity_map === undefined) {
         return err({
           tag: "not_ready",
@@ -467,6 +501,8 @@ export class FdeaService {
     >
   > {
     return this.withProject(input.project_id, async (state) => {
+      const skipped = this.painAnalysisSkipped(state);
+      if (skipped !== undefined) return err(skipped);
       if (state.opportunity_map === undefined) {
         return err({
           tag: "not_ready",
@@ -558,7 +594,7 @@ export class FdeaService {
     >
   > {
     return this.withProject(input.project_id, async (state) => {
-      if (!isScopeSelected(state)) {
+      if (!state.skip_pain && !isScopeSelected(state)) {
         return err({
           tag: "not_ready",
           message:
@@ -582,6 +618,11 @@ export class FdeaService {
         seq,
         model: input.model,
         model_seq: seq,
+        mock_data:
+          state.mock_data !== undefined &&
+          mockDataIssues(input.model, state.mock_data).length === 0
+            ? state.mock_data
+            : undefined,
         schema_approval: undefined,
       };
       const open = deriveClarifications(next).filter(
@@ -606,12 +647,56 @@ export class FdeaService {
         next:
           open.length === 0
             ? lacksDatabase(next)
-              ? "Check project_status, then generate_application."
-              : "Show database_schema.summary to the user (Mermaid ER diagram plus table detail), then call approve_database_schema when they confirm."
+              ? `${mockHint(next)}Check project_status, then generate_application.`
+              : `${mockHint(next)}Show database_schema.summary to the user (Mermaid ER diagram plus table detail), then call approve_database_schema when they confirm.`
             : lacksDatabase(next)
-              ? "Ask the user each open clarification."
-              : "Ask the user each open clarification. For directive:schema, call get_database_schema and show the Mermaid summary before approve_database_schema.",
+              ? `${mockHint(next)}Ask the user each open clarification.`
+              : `${mockHint(next)}Ask the user each open clarification. For directive:schema, call get_database_schema and show the Mermaid summary before approve_database_schema.`,
       });
+    });
+  }
+
+  async submitMockData(input: {
+    project_id: string;
+    mock_data: MockData;
+  }): Promise<
+    Result<{ entities: number; rows: number; next: string }, FdeaError>
+  > {
+    return this.withProject(input.project_id, async (state) => {
+      if (state.model === undefined) {
+        return err({
+          tag: "not_ready",
+          message: "Submit a process model before the mock data.",
+          blockers: readinessBlockers(state),
+        });
+      }
+      if (state.directives.fidelity === "foundation") {
+        return err({
+          tag: "invalid_input",
+          message:
+            "Mock data applies to prototypes. A foundation ships with real data only.",
+        });
+      }
+      const issues = mockDataIssues(state.model, input.mock_data);
+      if (issues.length > 0) {
+        return err({
+          tag: "invalid_input",
+          message: `The mock data has ${issues.length} problem(s). Fix them and resubmit.`,
+          issues,
+        });
+      }
+      const seq = state.seq + 1;
+      return this.commit(
+        { ...state, seq, mock_data: input.mock_data },
+        {
+          entities: input.mock_data.entities.length,
+          rows: input.mock_data.entities.reduce(
+            (total, entity) => total + entity.rows.length,
+            0,
+          ),
+          next: "Check project_status, then generate_application.",
+        },
+      );
     });
   }
 
@@ -731,7 +816,6 @@ export class FdeaService {
     project_id: string;
     fidelity?: Fidelity | undefined;
     stack?: Stack | undefined;
-    prototype_variants?: number | undefined;
     rbac?: boolean | undefined;
     deployment?: "cloud" | "local" | undefined;
   }): Promise<Result<{ directives: ProjectState["directives"] }, FdeaError>> {
@@ -739,8 +823,7 @@ export class FdeaService {
     if (Object.values(patch).every((value) => value === undefined)) {
       return err({
         tag: "invalid_input",
-        message:
-          "Provide fidelity, stack, prototype_variants, rbac and/or deployment.",
+        message: "Provide fidelity, stack, rbac and/or deployment.",
       });
     }
     return this.withProject(projectId, async (state) => {
@@ -809,7 +892,7 @@ export class FdeaService {
         return err({
           tag: "invalid_input",
           message:
-            "Database schema does not apply to prototypes or the static stack (no database).",
+            "Database schema does not apply to the static stack (no database).",
         });
       }
       if (state.model === undefined) {
@@ -855,7 +938,7 @@ export class FdeaService {
         return err({
           tag: "invalid_input",
           message:
-            "Database schema approval does not apply to prototypes or the static stack (no database).",
+            "Database schema approval does not apply to the static stack (no database).",
         });
       }
       if (state.model === undefined) {
@@ -920,10 +1003,12 @@ export class FdeaService {
         name: string;
         out_dir: string;
         directives: ProjectState["directives"];
+        skip_pain: boolean;
         sources: number;
         opportunities: number | null;
         selected_opportunity_id: string | null;
         model: { actors: number; entities: number; steps: number } | null;
+        mock_data: { entities: number; rows: number } | null;
         schema_approved: boolean;
         clarifications: { open: number; answered: number };
         design: DesignSpec["kind"];
@@ -942,6 +1027,7 @@ export class FdeaService {
         name: state.name,
         out_dir: state.out_dir,
         directives: state.directives,
+        skip_pain: state.skip_pain,
         sources: state.sources.length,
         opportunities: state.opportunity_map?.opportunities.length ?? null,
         selected_opportunity_id: isScopeSelected(state)
@@ -954,6 +1040,16 @@ export class FdeaService {
                 actors: state.model.actors.length,
                 entities: state.model.entities.length,
                 steps: state.model.steps.length,
+              },
+        mock_data:
+          state.mock_data === undefined
+            ? null
+            : {
+                entities: state.mock_data.entities.length,
+                rows: state.mock_data.entities.reduce(
+                  (total, entity) => total + entity.rows.length,
+                  0,
+                ),
               },
         schema_approved: isSchemaApproved(state),
         clarifications: {
@@ -974,9 +1070,7 @@ export class FdeaService {
   }): Promise<Result<NonNullable<ProjectState["generation"]>, FdeaError>> {
     return this.withProject(input.project_id, async (state) => {
       const blockers = readinessBlockers(state);
-      const { fidelity, rbac, deployment, prototype_variants } =
-        state.directives;
-      const stack = stackOf(state.directives);
+      const { fidelity, stack, rbac, deployment } = state.directives;
       const access = lacksDatabase(state)
         ? { rbac: false, deployment: "none" as const }
         : rbac === undefined ||
@@ -1004,9 +1098,9 @@ export class FdeaService {
         model: state.model,
         fidelity,
         stack,
-        prototypeVariants: prototype_variants ?? 3,
         ...access,
         design: resolveDesign(state),
+        mockData: fidelity === "prototype" ? state.mock_data : undefined,
       });
       if (!generated.ok) return generated;
       return this.commit(

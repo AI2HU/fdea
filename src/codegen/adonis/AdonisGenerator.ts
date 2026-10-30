@@ -20,19 +20,12 @@ import {
   cloudEnvSchema,
   gitignoreForLocal,
   localDatabaseConfig,
-  stripDatabaseEnvFile,
-  stripDatabaseEnvSchema,
-  stripDatabaseFromAdonisRc,
 } from "./database.js";
 import {
   databaseName,
   emitProject,
   KIT_FILES_TO_REMOVE,
 } from "./emitProject.js";
-import {
-  PROTOTYPE_KIT_FILES_TO_REMOVE,
-  PROTOTYPE_ROUTES,
-} from "./emitPrototype.js";
 import { validatorFieldNames } from "./emitData.js";
 import { MCP_ROUTE } from "./emitHttp.js";
 import { ensureMcpRc } from "./emitMcp.js";
@@ -87,7 +80,6 @@ export class AdonisGenerator implements ApplicationGenerator {
     input: GenerationInput,
     outDir: string,
   ): Promise<GenerationResult> {
-    const prototype = input.fidelity === "prototype";
     const name = basename(outDir);
     const scaffoldArgs = [
       "create",
@@ -110,103 +102,74 @@ export class AdonisGenerator implements ApplicationGenerator {
       ["install", "--save", ...UI_PACKAGES],
       10 * MINUTE,
     );
-    if (!prototype) {
-      await this.exec(
-        "install_bouncer",
-        outDir,
-        "node",
-        ["ace", "add", "@adonisjs/bouncer", "--package-manager=npm"],
-        10 * MINUTE,
-      );
-      await this.exec(
-        "install_mcp",
-        outDir,
-        "npm",
-        ["install", "--save", "@jrmc/adonis-mcp"],
-        10 * MINUTE,
-      );
-    }
+    await this.exec(
+      "install_bouncer",
+      outDir,
+      "node",
+      ["ace", "add", "@adonisjs/bouncer", "--package-manager=npm"],
+      10 * MINUTE,
+    );
+    await this.exec(
+      "install_mcp",
+      outDir,
+      "npm",
+      ["install", "--save", "@jrmc/adonis-mcp"],
+      10 * MINUTE,
+    );
 
     for (const path of KIT_FILES_TO_REMOVE) {
       await rm(join(outDir, path), { force: true });
-    }
-    if (prototype) {
-      for (const path of PROTOTYPE_KIT_FILES_TO_REMOVE) {
-        await rm(join(outDir, path), { force: true });
-      }
     }
     const plan = buildPlan(input.model);
     const files = emitProject(input);
     await writeAll(outDir, files);
 
-    if (prototype) {
-      await ensureFixtureImport(outDir);
-      await replaceRoutes(outDir, PROTOTYPE_ROUTES);
-      await this.stripPrototypeDatabase(outDir);
-      await this.exec(
-        "codegen",
-        outDir,
-        "node",
-        ["ace", "codegen"],
-        5 * MINUTE,
-      );
-    } else {
-      await appendFile(
-        join(outDir, "start", "validator.ts"),
-        validatorFieldNames(plan.entities),
-      );
-      await this.configureDatabase(input, outDir);
+    await appendFile(
+      join(outDir, "start", "validator.ts"),
+      validatorFieldNames(plan.entities),
+    );
+    await this.configureDatabase(input, outDir);
 
-      // Defer MCP provider registration until after migrate: ace boots providers
-      // during codegen/migrate, and MCP tools import models that extend
-      // #database/schema classes produced by Lucid schemaGeneration on migrate.
-      await this.exec(
-        "codegen",
-        outDir,
-        "node",
-        ["ace", "codegen"],
-        5 * MINUTE,
-      );
-      await this.exec(
-        "migrate",
-        outDir,
-        "node",
-        ["ace", "migration:run"],
-        5 * MINUTE,
-      );
-      await this.configureMcp(outDir);
-      await appendFile(join(outDir, "start", "routes.ts"), `\n${MCP_ROUTE}`);
-      await rm(join(outDir, "tmp", "db.sqlite3"), { force: true });
-      await rm(join(outDir, "storage", "db.sqlite3"), { force: true });
+    // Defer MCP provider registration until after migrate: ace boots providers
+    // during codegen/migrate, and MCP tools import models that extend
+    // #database/schema classes produced by Lucid schemaGeneration on migrate.
+    await this.exec("codegen", outDir, "node", ["ace", "codegen"], 5 * MINUTE);
+    await this.exec(
+      "migrate",
+      outDir,
+      "node",
+      ["ace", "migration:run"],
+      5 * MINUTE,
+    );
+    await this.configureMcp(outDir);
+    await appendFile(join(outDir, "start", "routes.ts"), `\n${MCP_ROUTE}`);
+    await rm(join(outDir, "tmp", "db.sqlite3"), { force: true });
+    await rm(join(outDir, "storage", "db.sqlite3"), { force: true });
 
-      if (input.deployment === "cloud")
-        await this.switchToPostgres(outDir, input.projectName);
-    }
+    if (input.deployment === "cloud")
+      await this.switchToPostgres(outDir, input.projectName);
 
     const backlog = uiBacklog(plan);
-    const limitations = prototype
-      ? [
-          "Prototype fidelity: lightweight Adonis + Vue gallery with mock fixtures. No database, process Lucid models, MCP, or RBAC.",
-          "Invent each approach under inertia/pages/approaches/<id>/ from PROTOTYPE.md.",
-          "When a winner is chosen, generate a foundation into a new empty directory.",
-          "The design font is applied by name; web fonts are not bundled.",
-        ]
-      : [
-          "Codegen emits the foundation only (data, HTTP, auth, MCP, design tokens, shell). Process Inertia pages are not generated — implement them from UI.md with full creative freedom.",
-          "The foundation shell uses a light theme; process UI may change that.",
-          "The design font is applied by name; web fonts are not bundled.",
-          "Sign-up is closed; create users with `node ace user:create`.",
-          "Agents authenticate to `/mcp` with a bearer access token from `node ace mcp:token`.",
-          ...(input.rbac
-            ? [
-                "MCP tools enforce the same RBAC permissions as the UI through Bouncer policies.",
-              ]
-            : [
-                "RBAC is off: every authenticated MCP token may call every process tool.",
-              ]),
-        ];
+    const limitations = [
+      "Codegen emits the foundation only (data, HTTP, auth, MCP, design tokens, shell). Process Inertia pages are not generated — implement them from UI.md with full creative freedom.",
+      "The foundation shell uses a light theme; process UI may change that.",
+      "The design font is applied by name; web fonts are not bundled.",
+      "Sign-up is closed; create users with `node ace user:create`.",
+      "Agents authenticate to `/mcp` with a bearer access token from `node ace mcp:token`.",
+      ...(input.rbac
+        ? [
+            "MCP tools enforce the same RBAC permissions as the UI through Bouncer policies.",
+          ]
+        : [
+            "RBAC is off: every authenticated MCP token may call every process tool.",
+          ]),
+      ...(input.mockData === undefined
+        ? []
+        : [
+            "Prototype: the database holds mock data only. Load it with `node ace db:seed` (database/seeders/mock_data_seeder.ts).",
+          ]),
+    ];
     if (
-      !prototype &&
       input.deployment === "local" &&
       input.model.entities.some((entity) =>
         entity.fields.some((field) => field.type === "decimal"),
@@ -216,7 +179,7 @@ export class AdonisGenerator implements ApplicationGenerator {
         "SQLite stores decimal values as floating-point numbers.",
       );
     }
-    if (!prototype && input.deployment === "cloud") {
+    if (input.deployment === "cloud") {
       limitations.push(
         "Schema classes were generated against SQLite; PostgreSQL was not run during generation.",
         "The PostgreSQL connection uses the DB_* variables without TLS options.",
@@ -230,7 +193,7 @@ export class AdonisGenerator implements ApplicationGenerator {
         "--write",
         "app",
         "commands",
-        ...(prototype ? [] : ["database"]),
+        "database",
         "start",
         "inertia",
         "config",
@@ -254,25 +217,18 @@ export class AdonisGenerator implements ApplicationGenerator {
       );
     }
 
-    let built = true;
-    let buildOutput = "";
-    if (!prototype) {
-      const build = await this.runner.run("node", ["ace", "build"], {
-        cwd: outDir,
-        timeoutMs: 10 * MINUTE,
-      });
-      built = build.code === 0 && !build.timedOut;
-      buildOutput = build.output;
-      await rm(join(outDir, "build"), { recursive: true, force: true });
-      await rm(join(outDir, "public", "assets"), {
-        recursive: true,
-        force: true,
-      });
-      if (!built) {
-        limitations.push(
-          "The production build failed; see verification output.",
-        );
-      }
+    const build = await this.runner.run("node", ["ace", "build"], {
+      cwd: outDir,
+      timeoutMs: 10 * MINUTE,
+    });
+    const built = build.code === 0 && !build.timedOut;
+    await rm(join(outDir, "build"), { recursive: true, force: true });
+    await rm(join(outDir, "public", "assets"), {
+      recursive: true,
+      force: true,
+    });
+    if (!built) {
+      limitations.push("The production build failed; see verification output.");
     }
 
     return {
@@ -299,11 +255,11 @@ export class AdonisGenerator implements ApplicationGenerator {
       })),
       verification: {
         typecheck: passed ? "passed" : "failed",
-        build: prototype ? "passed" : built ? "passed" : "failed",
-        ...(passed && (prototype || built)
+        build: built ? "passed" : "failed",
+        ...(passed && built
           ? {}
           : {
-              output: tail(passed ? buildOutput : typecheck.output, 6000),
+              output: tail(passed ? build.output : typecheck.output, 6000),
             }),
       },
       limitations,
@@ -320,41 +276,6 @@ export class AdonisGenerator implements ApplicationGenerator {
       );
     }
     await writeFile(rcPath, patched);
-  }
-
-  private async stripPrototypeDatabase(outDir: string): Promise<void> {
-    const rcPath = join(outDir, "adonisrc.ts");
-    const patched = stripDatabaseFromAdonisRc(await readFile(rcPath, "utf8"));
-    if (patched === undefined) {
-      throw new StepFailure(
-        "strip_database",
-        "adonisrc.ts has an unexpected shape when removing Lucid and Auth",
-      );
-    }
-    await writeFile(rcPath, patched);
-
-    await rm(join(outDir, "config", "database.ts"), { force: true });
-    await rm(join(outDir, "database"), { recursive: true, force: true });
-
-    const envSchemaPath = join(outDir, "start", "env.ts");
-    await writeFile(
-      envSchemaPath,
-      stripDatabaseEnvSchema(await readFile(envSchemaPath, "utf8")),
-    );
-    for (const envFile of [".env.example", ".env"]) {
-      const path = join(outDir, envFile);
-      const source = await readFile(path, "utf8").catch(() => undefined);
-      if (source === undefined) continue;
-      await writeFile(path, stripDatabaseEnvFile(source));
-    }
-
-    await this.exec(
-      "remove_database_packages",
-      outDir,
-      "npm",
-      ["uninstall", "--save", "@adonisjs/lucid", "better-sqlite3"],
-      10 * MINUTE,
-    );
   }
 
   private async configureDatabase(
@@ -423,23 +344,3 @@ export class AdonisGenerator implements ApplicationGenerator {
     );
   }
 }
-
-const ensureFixtureImport = async (outDir: string): Promise<void> => {
-  const packagePath = join(outDir, "package.json");
-  const raw = await readFile(packagePath, "utf8");
-  const pkg = JSON.parse(raw) as {
-    imports?: Record<string, string>;
-  };
-  const imports = { ...pkg.imports };
-  delete imports["#database/*"];
-  imports["#fixtures/*"] = "./app/fixtures/*.js";
-  pkg.imports = imports;
-  await writeFile(packagePath, `${JSON.stringify(pkg, null, 2)}\n`);
-};
-
-const replaceRoutes = async (
-  outDir: string,
-  contents: string,
-): Promise<void> => {
-  await writeFile(join(outDir, "start", "routes.ts"), contents);
-};

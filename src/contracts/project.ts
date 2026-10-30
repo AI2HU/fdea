@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MockDataSchema } from "./mockData.js";
 import { OpportunityMapSchema } from "./opportunityMap.js";
 import { ProcessModelSchema } from "./processModel.js";
 
@@ -10,29 +11,20 @@ export const DirectivesSchema = z.object({
     .enum(FIDELITIES)
     .optional()
     .describe(
-      "foundation: production application. prototype: lightweight Vue gallery with mock data.",
+      "foundation: production application with real data only. prototype: the same production-ready application filled with mock data.",
     ),
   stack: z
     .enum(STACKS)
     .optional()
     .describe(
-      "fullstack: AdonisJS + Vue with database, auth and MCP. static: Astro + Vue static website. Prototypes default to static.",
-    ),
-  prototype_variants: z
-    .number()
-    .int()
-    .min(2)
-    .max(5)
-    .optional()
-    .describe(
-      "Number of visual approaches to scaffold when fidelity is prototype (default 3).",
+      "fullstack: AdonisJS + Vue with database, auth and MCP. static: Astro + Vue static website.",
     ),
   rbac: z.boolean().optional(),
   deployment: z
     .enum(["cloud", "local", "none"])
     .optional()
     .describe(
-      "cloud: PostgreSQL. local: SQLite. none: no database (prototypes).",
+      "cloud: PostgreSQL. local: SQLite. none: no database (static stack).",
     ),
 });
 
@@ -172,6 +164,7 @@ export const ProjectStateSchema = z.object({
   id: z.string(),
   name: z.string(),
   out_dir: z.string(),
+  skip_pain: z.boolean().default(false),
   created_at: z.string(),
   seq: z.number().int(),
   directives: DirectivesSchema,
@@ -181,6 +174,7 @@ export const ProjectStateSchema = z.object({
   scope_selection: ScopeSelectionSchema.optional(),
   model: ProcessModelSchema.optional(),
   model_seq: z.number().int(),
+  mock_data: MockDataSchema.optional(),
   answers: z.array(AnswerRecordSchema),
   schema_approval: SchemaApprovalSchema.optional(),
   submitted_design: SubmittedDesignSchema.optional(),

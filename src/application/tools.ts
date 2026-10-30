@@ -31,6 +31,7 @@ const HANDLERS: Handlers = {
   select_opportunity: (service, input) => service.selectOpportunity(input),
   get_process_model: (service, input) => service.getProcessModel(input),
   submit_process_model: (service, input) => service.submitProcessModel(input),
+  submit_mock_data: (service, input) => service.submitMockData(input),
   list_clarifications: (service, input) => service.listClarifications(input),
   answer_clarifications: (service, input) =>
     service.answerClarifications(input),

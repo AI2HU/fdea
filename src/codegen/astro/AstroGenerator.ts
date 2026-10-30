@@ -7,7 +7,6 @@ import type {
 import type { GenerationResult } from "../../contracts/project.js";
 import type { FdeaError, Result } from "../../domain/result.js";
 import { buildPlan } from "../adonis/plan.js";
-import type { GeneratedFile } from "../files.js";
 import { SpawnRunner, tail, type CommandRunner } from "../runner.js";
 import {
   execStep,
@@ -16,7 +15,6 @@ import {
   StepFailure,
   writeAll,
 } from "../workspace.js";
-import { emitGallery, galleryBacklog } from "./emitGallery.js";
 import { emitSite, staticBacklog, unsupportedOperations } from "./emitSite.js";
 import { astroConfig, astroPackageJson, astroTsconfig } from "./kit.js";
 
@@ -38,9 +36,6 @@ const PACKAGES = [
   "class-variance-authority",
 ] as const;
 const DEV_PACKAGES = ["@astrojs/check", "typescript", "vue-tsc"] as const;
-
-export const emitAstroProject = (input: GenerationInput): GeneratedFile[] =>
-  input.fidelity === "prototype" ? emitGallery(input) : emitSite(input);
 
 export interface AstroGeneratorOptions {
   readonly runner?: CommandRunner;
@@ -97,7 +92,6 @@ export class AstroGenerator implements ApplicationGenerator {
     input: GenerationInput,
     outDir: string,
   ): Promise<GenerationResult> {
-    const prototype = input.fidelity === "prototype";
     const scaffoldArgs = [
       "create",
       "astro@latest",
@@ -130,28 +124,26 @@ export class AstroGenerator implements ApplicationGenerator {
     await this.patch(outDir, "tsconfig.json", astroTsconfig);
     await this.patch(outDir, "package.json", astroPackageJson);
 
-    const files = emitAstroProject(input);
+    const files = emitSite(input);
     await writeAll(outDir, files);
 
     const plan = buildPlan(input.model);
     const unsupported = unsupportedOperations(plan);
-    const limitations = prototype
-      ? [
-          "Prototype fidelity: static Astro + Vue gallery with mock fixtures. No server, database, MCP, or RBAC.",
-          "Invent each approach under src/pages/approaches/<id>/ from PROTOTYPE.md.",
-          "When a winner is chosen, generate a foundation into a new empty directory.",
-          "The design font is applied by name; web fonts are not bundled.",
-        ]
-      : [
-          "Static stack: no server, database, auth, RBAC or MCP. Records live in src/data/*.json, validated by content collections at build time.",
-          "Codegen emits the foundation only (content schema, design tokens, layout). Process pages are not generated — implement them from UI.md.",
-          "The design font is applied by name; web fonts are not bundled.",
-          ...(unsupported.length === 0
-            ? []
-            : [
-                `A static site cannot persist the process writes (${unsupported.join(", ")}); choose the fullstack stack if they are required.`,
-              ]),
-        ];
+    const limitations = [
+      "Static stack: no server, database, auth, RBAC or MCP. Records live in src/data/*.json, validated by content collections at build time.",
+      "Codegen emits the foundation only (content schema, design tokens, layout). Process pages are not generated — implement them from UI.md.",
+      "The design font is applied by name; web fonts are not bundled.",
+      ...(unsupported.length === 0
+        ? []
+        : [
+            `A static site cannot persist the process writes (${unsupported.join(", ")}); choose the fullstack stack if they are required.`,
+          ]),
+      ...(input.mockData === undefined
+        ? []
+        : [
+            "Prototype: src/data/*.json holds mock data only; every record is fictional.",
+          ]),
+    ];
 
     const typecheck = await this.runner.run("npm", ["run", "typecheck"], {
       cwd: outDir,
@@ -164,22 +156,17 @@ export class AstroGenerator implements ApplicationGenerator {
       );
     }
 
-    let built = true;
-    let buildOutput = "";
-    if (!prototype) {
-      const build = await this.runner.run("npm", ["run", "build"], {
-        cwd: outDir,
-        timeoutMs: 10 * MINUTE,
-      });
-      built = build.code === 0 && !build.timedOut;
-      buildOutput = build.output;
-      await rm(join(outDir, "dist"), { recursive: true, force: true });
-      if (!built) {
-        limitations.push("The static build failed; see verification output.");
-      }
+    const build = await this.runner.run("npm", ["run", "build"], {
+      cwd: outDir,
+      timeoutMs: 10 * MINUTE,
+    });
+    const built = build.code === 0 && !build.timedOut;
+    await rm(join(outDir, "dist"), { recursive: true, force: true });
+    if (!built) {
+      limitations.push("The static build failed; see verification output.");
     }
 
-    const backlog = prototype ? galleryBacklog(plan) : staticBacklog(plan);
+    const backlog = staticBacklog(plan);
     return {
       output_dir: outDir,
       generated_at: new Date().toISOString(),
@@ -204,7 +191,7 @@ export class AstroGenerator implements ApplicationGenerator {
         build: built ? "passed" : "failed",
         ...(passed && built
           ? {}
-          : { output: tail(passed ? buildOutput : typecheck.output, 6000) }),
+          : { output: tail(passed ? build.output : typecheck.output, 6000) }),
       },
       limitations,
     };

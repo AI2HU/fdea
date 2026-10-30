@@ -1,4 +1,4 @@
-import type { Directives, ProjectState, Stack } from "../contracts/project.js";
+import type { Directives, ProjectState } from "../contracts/project.js";
 import { isScopeSelected, priorityClarificationId } from "./opportunity.js";
 import { completenessGaps } from "./validate.js";
 
@@ -35,47 +35,32 @@ export const isSchemaApproved = (state: ProjectState): boolean =>
   state.schema_approval !== undefined &&
   state.schema_approval.model_seq === state.model_seq;
 
-/** Only fullstack foundations have a database, RBAC and a deployment target. */
+/** Only the fullstack stack has a database, RBAC and a deployment target. */
 const usesDatabase = (directives: Directives): boolean =>
-  directives.fidelity === "foundation" && directives.stack === "fullstack";
+  directives.stack === "fullstack";
 
 export const lacksDatabase = (state: ProjectState): boolean =>
-  state.directives.fidelity === "prototype" ||
   state.directives.stack === "static";
-
-export const stackOf = (directives: Directives): Stack | undefined =>
-  directives.stack ??
-  (directives.fidelity === "prototype" ? "static" : undefined);
 
 export type DirectivesPatch = {
   readonly [K in keyof Directives]?: Directives[K] | undefined;
 };
 
 /**
- * Prototypes default to the static stack. Directives that only make sense with
- * a database are forced off without one, and asked again when one comes back.
+ * Directives that only make sense with a database are forced off on the static
+ * stack, and asked again when a database comes back.
  */
 export const updateDirectives = (
   current: Directives,
   patch: DirectivesPatch,
 ): Directives => {
   const fidelity = patch.fidelity ?? current.fidelity;
-  const fidelityChanged =
-    patch.fidelity !== undefined && patch.fidelity !== current.fidelity;
-  const stack =
-    patch.stack ??
-    (fidelityChanged ? undefined : current.stack) ??
-    (fidelity === "prototype" ? "static" : undefined);
-  const prototypeVariants =
-    patch.prototype_variants ?? current.prototype_variants;
+  const stack = patch.stack ?? current.stack;
   const next: Directives = {
     ...(fidelity === undefined ? {} : { fidelity }),
     ...(stack === undefined ? {} : { stack }),
-    ...(prototypeVariants === undefined
-      ? {}
-      : { prototype_variants: prototypeVariants }),
   };
-  if (fidelity === "prototype" || stack === "static") {
+  if (stack === "static") {
     return { ...next, rbac: false, deployment: "none" };
   }
   const carried = current.deployment !== "none";
@@ -130,14 +115,14 @@ export const deriveClarifications = (state: ProjectState): Clarification[] => {
         id: FIDELITY_CLARIFICATION_ID,
         kind: "directive_fidelity",
         question:
-          "Generate a production foundation, or a lightweight Vue prototype gallery (static Astro site) to compare approaches?",
+          "Generate a production foundation with real data only, or a prototype: the same production-ready application filled with mock data derived from the sources?",
         options: ["foundation", "prototype"],
       },
       fidelity,
     ),
   ];
 
-  if (fidelity === "foundation") {
+  if (fidelity !== undefined) {
     result.push(
       directiveClarification(
         {
@@ -176,7 +161,7 @@ export const deriveClarifications = (state: ProjectState): Clarification[] => {
     );
   }
 
-  const map = state.opportunity_map;
+  const map = state.skip_pain ? undefined : state.opportunity_map;
   if (map !== undefined) {
     if (!isScopeSelected(state)) {
       for (const opportunity of map.opportunities) {
@@ -262,18 +247,31 @@ export const readinessBlockers = (state: ProjectState): string[] => {
   ) {
     blockers.push("No process source has been ingested (ingest_source).");
   }
-  if (state.opportunity_map === undefined) {
-    blockers.push(
-      "No opportunity map has been submitted (submit_opportunity_map). Extract the most valuable pains from the documents before modeling the process.",
-    );
-  } else if (!isScopeSelected(state)) {
-    blockers.push(
-      "No build scope has been selected (select_opportunity). Show get_opportunity_ranking to the user and record their choice.",
-    );
+  if (!state.skip_pain) {
+    if (state.opportunity_map === undefined) {
+      blockers.push(
+        "No opportunity map has been submitted (submit_opportunity_map). Extract the most valuable pains from the documents before modeling the process.",
+      );
+    } else if (!isScopeSelected(state)) {
+      blockers.push(
+        "No build scope has been selected (select_opportunity). Show get_opportunity_ranking to the user and record their choice.",
+      );
+    }
   }
   if (state.model === undefined) {
     blockers.push(
-      "No process model has been submitted (submit_process_model).",
+      state.skip_pain
+        ? "No process model has been submitted (submit_process_model). Model what the sources ask to build."
+        : "No process model has been submitted (submit_process_model).",
+    );
+  }
+  if (
+    state.model !== undefined &&
+    state.directives.fidelity === "prototype" &&
+    state.mock_data === undefined
+  ) {
+    blockers.push(
+      "No mock data has been submitted (submit_mock_data). A prototype is the application filled with mock data: derive realistic records for every entity from the context of the sources.",
     );
   }
   for (const item of deriveClarifications(state)) {

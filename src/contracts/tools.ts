@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MockDataSchema } from "./mockData.js";
 import { OpportunityMapSchema } from "./opportunityMap.js";
 import { ProcessModelSchema } from "./processModel.js";
 import { SourceRoleSchema, STACKS, SubmittedDesignSchema } from "./project.js";
@@ -16,6 +17,12 @@ export const TOOL_INPUTS = {
       .min(1)
       .describe(
         "Absolute path of the directory the application is generated into. Must be absent or empty.",
+      ),
+    skip_pain: z
+      .boolean()
+      .optional()
+      .describe(
+        "Skip pain analysis: the sources are the specification and are applied as asked. When true, do not submit an opportunity map, rank pains, or select an opportunity; submit a process model of everything the sources ask for after reading them.",
       ),
   },
   ingest_source: {
@@ -72,7 +79,13 @@ export const TOOL_INPUTS = {
   submit_process_model: {
     project_id: projectId,
     model: ProcessModelSchema.describe(
-      "The process for the selected opportunity only. Include only what the sources support; record anything unclear or out of scope in unknowns.",
+      "The process for the selected opportunity only, or, when the project was created with skip_pain, the process the sources ask to build. Include only what the sources support; record anything unclear or out of scope in unknowns.",
+    ),
+  },
+  submit_mock_data: {
+    project_id: projectId,
+    mock_data: MockDataSchema.describe(
+      "Mock records for every entity of the process model, derived from the context of the sources: the vocabulary, names, places, currencies, volumes, languages and states they show. Fictional only, never real personal data.",
     ),
   },
   list_clarifications: { project_id: projectId },
@@ -88,34 +101,25 @@ export const TOOL_INPUTS = {
       .enum(["foundation", "prototype"])
       .optional()
       .describe(
-        "foundation: production-ready application. prototype: lightweight Vue approach gallery with mock data.",
+        "foundation: production-ready application with real data only. prototype: the same production-ready application filled with mock data.",
       ),
     stack: z
       .enum(STACKS)
       .optional()
       .describe(
-        "fullstack: AdonisJS + Vue (database, auth, MCP). static: Astro + Vue static website (no server, database, auth or MCP). Prototypes default to static.",
-      ),
-    prototype_variants: z
-      .number()
-      .int()
-      .min(2)
-      .max(5)
-      .optional()
-      .describe(
-        "How many visual approaches to scaffold for a prototype (default 3).",
+        "fullstack: AdonisJS + Vue (database, auth, MCP). static: Astro + Vue static website (no server, database, auth or MCP).",
       ),
     rbac: z
       .boolean()
       .optional()
       .describe(
-        "Whether the application requires role-based access control. Ignored for prototypes and the static stack.",
+        "Whether the application requires role-based access control. Ignored on the static stack.",
       ),
     deployment: z
       .enum(["cloud", "local"])
       .optional()
       .describe(
-        "cloud: PostgreSQL. local: SQLite on one machine. Ignored for prototypes and the static stack (no database).",
+        "cloud: PostgreSQL. local: SQLite on one machine. Ignored on the static stack (no database).",
       ),
   },
   get_design_spec: { project_id: projectId },

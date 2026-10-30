@@ -28,7 +28,6 @@ const inputFor = (
   model: purchaseModel("src_01"),
   fidelity: "foundation",
   stack: "fullstack",
-  prototypeVariants: 3,
   rbac: true,
   deployment: "cloud",
   design: {
@@ -36,6 +35,7 @@ const inputFor = (
     tokens: SHADCN_DEFAULT_TOKENS,
     provenance: [],
   },
+  mockData: undefined,
   ...overrides,
 });
 
@@ -98,25 +98,39 @@ describe("emitted application", () => {
     expect(contract).toContain("purchase_requests.store");
   });
 
-  it("emits a lightweight Vue prototype gallery without Lucid process models", () => {
+  it("seeds a prototype with its mock data in reference order", () => {
     const proto = emitProject(
-      inputFor({ fidelity: "prototype", rbac: false, deployment: "none" }),
+      inputFor({
+        fidelity: "prototype",
+        mockData: {
+          entities: [
+            {
+              entity_id: "purchase_request",
+              rows: [
+                {
+                  id: "r1",
+                  values: {
+                    title: "Laptops",
+                    amount: 1200,
+                    supplier: "acme",
+                    status: "pending",
+                  },
+                },
+              ],
+            },
+            {
+              entity_id: "supplier",
+              rows: [{ id: "acme", values: { name: "Acme Corp" } }],
+            },
+          ],
+        },
+      }),
     );
-    const paths = proto.map((file) => file.path);
-    expect(paths).toContain("PROTOTYPE.md");
-    expect(paths).toContain("app/fixtures/process.ts");
-    expect(paths).toContain("inertia/pages/approaches/index.vue");
-    expect(paths).toContain("inertia/pages/approaches/a/home.vue");
-    expect(paths).toContain("start/kernel.ts");
-    expect(paths).not.toContain("UI.md");
-    expect(paths).not.toContain("inertia/pages/auth/login.vue");
-    expect(paths).not.toContain("config/database.ts");
-    expect(paths.some((path) => path.startsWith("app/mcp/"))).toBe(false);
-    expect(
-      paths.some((path) => path.includes("purchase_requests_controller")),
-    ).toBe(false);
-    expect(contentsOf(proto, "start/kernel.ts")).not.toContain("auth");
-    expect(contentsOf(proto, "PROTOTYPE.md")).toContain("No database");
+    const seeder = contentsOf(proto, "database/seeders/mock_data_seeder.ts");
+    expect(seeder.indexOf("Acme Corp")).toBeLessThan(seeder.indexOf("Laptops"));
+    expect(seeder).toContain('supplierId: ref("supplier", "acme")');
+    expect(seeder).toContain('amount: "1200.00"');
+    expect(proto.map((file) => file.path)).toContain("UI.md");
   });
 
   it("only registers routes for operations the process performs", () => {

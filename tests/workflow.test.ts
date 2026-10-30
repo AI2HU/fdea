@@ -12,6 +12,7 @@ import { ok } from "../src/domain/result.js";
 import { ProjectStore } from "../src/store/ProjectStore.js";
 import {
   PROCESS_TEXT,
+  purchaseMockData,
   purchaseModel,
   purchaseOpportunityMap,
 } from "./fixtures.js";
@@ -188,7 +189,7 @@ describe("clarification gate", () => {
     expect(generated[0]?.design.kind).toBe("shadcn_default");
   });
 
-  it("generates a prototype without RBAC, deployment or schema approval", async () => {
+  it("generates a prototype from submitted mock data", async () => {
     const { projectId, sourceId } = await startProject();
     await selectPurchaseScope(projectId, sourceId);
     await call("submit_process_model", {
@@ -197,7 +198,21 @@ describe("clarification gate", () => {
     });
     await call("answer_clarifications", {
       project_id: projectId,
-      answers: [{ id: "directive:fidelity", answer: "prototype" }],
+      answers: [
+        { id: "directive:fidelity", answer: "prototype" },
+        { id: "directive:stack", answer: "static" },
+      ],
+    });
+    const blocked = await failure("generate_application", {
+      project_id: projectId,
+    });
+    if (blocked.tag !== "not_ready")
+      throw new Error(`unexpected ${blocked.tag}`);
+    expect(blocked.blockers.join(" ")).toMatch(/mock data/i);
+
+    await call("submit_mock_data", {
+      project_id: projectId,
+      mock_data: purchaseMockData,
     });
     await call("generate_application", { project_id: projectId });
     expect(generated).toHaveLength(1);
@@ -206,7 +221,7 @@ describe("clarification gate", () => {
       stack: "static",
       rbac: false,
       deployment: "none",
-      prototypeVariants: 3,
+      mockData: purchaseMockData,
     });
   });
 
@@ -305,5 +320,64 @@ describe("clarification gate", () => {
     );
     expect(afterIds).toContain("directive:rbac");
     expect(afterIds).toContain("directive:schema");
+  });
+
+  it("builds the requested process when pain analysis is skipped", async () => {
+    const project = await call("create_project", {
+      name: "Buy Desk",
+      out_dir: join(home, "direct"),
+      skip_pain: true,
+    });
+    const projectId = project["project_id"] as string;
+    expect(project["skip_pain"]).toBe(true);
+    const source = await call("ingest_source", {
+      project_id: projectId,
+      inline: { name: "process.md", text: PROCESS_TEXT },
+    });
+    const sourceId = source["id"] as string;
+
+    const rejected = await failure("submit_opportunity_map", {
+      project_id: projectId,
+      map: purchaseOpportunityMap(sourceId),
+    });
+    expect(rejected.tag).toBe("invalid_input");
+
+    await call("submit_process_model", {
+      project_id: projectId,
+      model: purchaseModel(sourceId),
+    });
+    const questions = await call("list_clarifications", {
+      project_id: projectId,
+    });
+    const ids = (questions["clarifications"] as Array<{ id: string }>).map(
+      (item) => item.id,
+    );
+    expect(ids.some((id) => id.startsWith("value:priority:"))).toBe(false);
+    expect(ids).not.toContain("directive:scope");
+
+    const status = await call("project_status", { project_id: projectId });
+    expect(status["skip_pain"]).toBe(true);
+    expect((status["blockers"] as string[]).join(" ")).not.toMatch(
+      /opportunity/i,
+    );
+
+    await call("answer_clarifications", {
+      project_id: projectId,
+      answers: [
+        { id: "directive:fidelity", answer: "prototype" },
+        { id: "directive:stack", answer: "static" },
+      ],
+    });
+    await call("submit_mock_data", {
+      project_id: projectId,
+      mock_data: purchaseMockData,
+    });
+    await call("generate_application", { project_id: projectId });
+    expect(generated).toHaveLength(1);
+    expect(generated[0]).toMatchObject({
+      fidelity: "prototype",
+      projectName: "Buy Desk",
+      mockData: purchaseMockData,
+    });
   });
 });

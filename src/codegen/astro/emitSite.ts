@@ -1,4 +1,5 @@
 import type { GenerationInput } from "../../application/ports.js";
+import type { MockData } from "../../contracts/mockData.js";
 import type { Field } from "../../contracts/processModel.js";
 import type { UiPageBacklogItem } from "../adonis/emitUi.js";
 import {
@@ -86,6 +87,30 @@ ${registry}
 
 const dataPath = (entity: EntityPlan): string =>
   `src/data/${entity.names.plural}.json`;
+
+const recordsJson = (
+  entity: EntityPlan,
+  data: MockData | undefined,
+): string => {
+  const rows =
+    data?.entities.find((item) => item.entity_id === entity.entity.id)?.rows ??
+    [];
+  return JSON.stringify(
+    rows.map((row) => ({
+      id: row.id,
+      ...Object.fromEntries(
+        entity.entity.fields.flatMap((field) => {
+          const value = row.values[field.name];
+          return value === null || value === undefined
+            ? []
+            : [[contentKey(field), value]];
+        }),
+      ),
+    })),
+    null,
+    2,
+  );
+};
 
 const pagePath = (entity: EntityPlan): string => entity.names.routePath;
 
@@ -198,7 +223,11 @@ const collectionSection = (
 ${entity.entity.fields.map((field) => fieldLine(field, plan)).join("\n")}
 `;
 
-const uiContractFile = (title: string, plan: GenerationPlan): GeneratedFile => {
+const uiContractFile = (
+  title: string,
+  plan: GenerationPlan,
+  mock: boolean,
+): GeneratedFile => {
   const backlog = staticBacklog(plan);
   const pages =
     backlog.length === 0
@@ -233,7 +262,7 @@ There is no server, database, auth, RBAC or MCP. Every page is prerendered at bu
 
 1. Create every backlog page under \`src/pages/\`. Load data with \`getCollection\` / \`getEntry\` from \`astro:content\`; dynamic pages export \`getStaticPaths\`.
 2. Write layout and content in \`.astro\`; use Vue components with a \`client:*\` directive only for interactive islands.
-3. Author records in the JSON files under \`src/data/\`. Do not invent records the documents do not provide.
+3. ${mock ? "The JSON files under `src/data/` hold mock records only. They are fictional; present them as such." : "Author records in the JSON files under `src/data/`. Do not invent records the documents do not provide."}
 4. Keep identity values (entry ids, collection names) separate from labels.
 5. After UI work: \`npm run typecheck\` and \`npm run build\` in the site directory.
 6. Do **not** call FDEA \`generate_application\` again to change UI — edit this site in place. Regenerate only into a new empty directory when the process model changes.
@@ -319,9 +348,11 @@ export const emitSite = (input: GenerationInput): GeneratedFile[] => {
   return [
     ...astroShellFiles(model.title, design.tokens, nav),
     contentConfigFile(plan),
-    ...plan.entities.map((entity) => file(dataPath(entity), "[]")),
+    ...plan.entities.map((entity) =>
+      file(dataPath(entity), recordsJson(entity, input.mockData)),
+    ),
     file("src/pages/index.astro", homePage(model.title, model.summary, nav)),
-    uiContractFile(model.title, plan),
+    uiContractFile(model.title, plan, input.mockData !== undefined),
     readme(input),
   ];
 };

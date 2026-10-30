@@ -1,3 +1,4 @@
+import type { MockData } from "../src/contracts/mockData.js";
 import type { OpportunityMap } from "../src/contracts/opportunityMap.js";
 import type { ProcessModel } from "../src/contracts/processModel.js";
 
@@ -179,4 +180,39 @@ export const purchaseModel = (sourceId: string): ProcessModel => {
     ],
     unknowns: [],
   };
+};
+
+export const purchaseMockData: MockData = {
+  entities: [
+    {
+      entity_id: "supplier",
+      rows: [
+        { id: "acme", values: { name: "Acme Office Supplies" } },
+        { id: "globex", values: { name: "Globex Hardware" } },
+      ],
+    },
+    {
+      entity_id: "purchase_request",
+      rows: [
+        {
+          id: "chairs",
+          values: {
+            title: "Ergonomic chairs",
+            amount: 1840.5,
+            supplier: "acme",
+            status: "pending",
+          },
+        },
+        {
+          id: "monitors",
+          values: {
+            title: "Monitors for the buyer desk",
+            amount: 960,
+            supplier: "globex",
+            status: "approved",
+          },
+        },
+      ],
+    },
+  ],
 };

@@ -83,13 +83,23 @@ export const runCli = async (
     .description(describe("create_project"))
     .argument("<name>", "name of the software")
     .requiredOption("--out <dir>", "directory to generate into")
-    .action(async (name: string, options: { out: string }) => {
-      await run(
-        "create_project",
-        { name, out_dir: resolve(deps.cwd, options.out) },
-        compact(),
-      );
-    });
+    .option(
+      "--skip-pain",
+      "Skip pain analysis and build what the sources ask for",
+    )
+    .action(
+      async (name: string, options: { out: string; skipPain?: boolean }) => {
+        await run(
+          "create_project",
+          {
+            name,
+            out_dir: resolve(deps.cwd, options.out),
+            ...(options.skipPain === true ? { skip_pain: true } : {}),
+          },
+          compact(),
+        );
+      },
+    );
 
   program
     .command(TOOL_DESCRIPTIONS.ingest_source.cli)
@@ -196,6 +206,22 @@ export const runCli = async (
     );
 
   program
+    .command(TOOL_DESCRIPTIONS.submit_mock_data.cli)
+    .description(describe("submit_mock_data"))
+    .argument("<project_id>")
+    .argument("<mock.json>", "file containing the mock data")
+    .action(async (projectId: string, file: string) =>
+      run(
+        "submit_mock_data",
+        {
+          project_id: projectId,
+          mock_data: await readJsonFile(file, deps.cwd),
+        },
+        compact(),
+      ),
+    );
+
+  program
     .command(TOOL_DESCRIPTIONS.list_clarifications.cli)
     .description(describe("list_clarifications"))
     .argument("<project_id>")
@@ -228,7 +254,6 @@ export const runCli = async (
     .argument("<project_id>")
     .option("--fidelity <kind>", "foundation or prototype")
     .option("--stack <kind>", "fullstack or static")
-    .option("--prototype-variants <n>", "number of prototype approaches (2-5)")
     .option("--rbac", "the application requires RBAC")
     .option("--no-rbac", "the application does not require RBAC")
     .option("--deployment <kind>", "cloud or local")
@@ -238,7 +263,6 @@ export const runCli = async (
         options: {
           fidelity?: string;
           stack?: string;
-          prototypeVariants?: string;
           rbac?: boolean;
           deployment?: string;
         },
@@ -251,14 +275,6 @@ export const runCli = async (
               ? {}
               : { fidelity: options.fidelity }),
             ...(options.stack === undefined ? {} : { stack: options.stack }),
-            ...(options.prototypeVariants === undefined
-              ? {}
-              : {
-                  prototype_variants: Number.parseInt(
-                    options.prototypeVariants,
-                    10,
-                  ),
-                }),
             ...(options.rbac === undefined ? {} : { rbac: options.rbac }),
             ...(options.deployment === undefined
               ? {}

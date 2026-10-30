@@ -1,3 +1,4 @@
+import type { MockData } from "../contracts/mockData.js";
 import type { ProcessModel } from "../contracts/processModel.js";
 import type {
   DesignSpec,
@@ -13,10 +14,11 @@ export interface GenerationInput {
   readonly model: ProcessModel;
   readonly fidelity: Fidelity;
   readonly stack: Stack;
-  readonly prototypeVariants: number;
   readonly rbac: boolean;
   readonly deployment: "cloud" | "local" | "none";
   readonly design: DesignSpec;
+  /** Present for prototypes: the records the generated application ships with. */
+  readonly mockData: MockData | undefined;
 }
 
 export interface ApplicationGenerator {
