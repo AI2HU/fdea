@@ -13,7 +13,7 @@ Ask `directive:fidelity` and then `directive:stack` before generating. A prototy
 
 | Stack       | Output                                                                                                                                                         | Gates                                                               |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `fullstack` | Production Adonis + Vue foundation (Lucid, auth, optional RBAC, optional MCP, design tokens, shell). Process pages via `UI.md`.                                | RBAC, MCP, deployment, schema approval, access approval (RBAC only) |
+| `fullstack` | Production Adonis + Vue foundation (Lucid, auth, optional RBAC, optional MCP, SES mail, S3 storage, design tokens, shell). Process pages via `UI.md`.          | RBAC, MCP, deployment, schema approval, access approval (RBAC only) |
 | `static`    | Static Astro + Vue website: typed content collections (JSON in `src/data/`), design tokens, layout, Vue primitives. Pages via `UI.md`. No server, auth or MCP. | Stack only                                                          |
 
 | Fidelity     | Data                                                                                                                       |

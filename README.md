@@ -70,6 +70,7 @@ Design tokens come from sources ingested with the design role (CSS custom proper
 
 - **Fullstack**: data layer, HTTP, auth, optional RBAC, design tokens, login/error shell, shadcn-style primitives, and `UI.md` describing the process pages the agent must build.
 - **Cloud** applications use PostgreSQL through `DB_*` variables. **Local** applications use a SQLite file under `storage/`.
+- Fullstack foundations always use **Amazon SES** for mail (`SES_*`) and **Amazon S3** for file storage (`S3_*`).
 - **With RBAC**, each actor becomes a role and each operation a permission (`entity.operation`). A seeder creates roles and permissions; policies guard every action. The agent UI should hide what a user cannot do.
 - **AI-native MCP** at `/mcp`: one tool per process operation. Agents authenticate with a bearer access token (`node ace mcp:token`). When RBAC is on, tools call the same Bouncer policies as the UI.
 - State changes in the process become transition actions guarded by the allowed source states; the state field is set by the server, not by free-form edits.

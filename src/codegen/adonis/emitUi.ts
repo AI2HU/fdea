@@ -170,7 +170,7 @@ export const uiContractFile = (
     "UI.md",
     `# UI contract — ${title}
 
-Codegen built the **foundation** (database, models, validators, controllers, routes, auth,${rbac ? " RBAC," : ""}${mcp ? " MCP," : ""} design tokens, and shadcn-style primitives). **Process UI is yours to invent.**
+Codegen built the **foundation** (database, models, validators, controllers, routes, auth,${rbac ? " RBAC," : ""}${mcp ? " MCP," : ""} SES mail, S3 storage, design tokens, and shadcn-style primitives). **Process UI is yours to invent.**
 
 Create every page listed below under \`inertia/pages/\`. Controllers already call \`inertia.render\` with these names and props. You may redesign layouts, navigation, dashboard, marketing surfaces, motion, and components however you want. Prefer the product and design sources over generic admin CRUD.
 

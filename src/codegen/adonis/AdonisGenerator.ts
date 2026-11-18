@@ -29,6 +29,13 @@ import {
 import { validatorFieldNames } from "./emitData.js";
 import { MCP_ROUTE } from "./emitHttp.js";
 import { ensureMcpRc } from "./emitMcp.js";
+import {
+  driveConfig,
+  ensureMailDriveRc,
+  mailConfig,
+  mailDriveEnvFile,
+  mailDriveEnvSchema,
+} from "./mailDrive.js";
 import { uiBacklog } from "./emitUi.js";
 import { buildPlan } from "./plan.js";
 
@@ -152,6 +159,7 @@ export class AdonisGenerator implements ApplicationGenerator {
 
     if (input.deployment === "cloud")
       await this.switchToPostgres(outDir, input.projectName);
+    await this.configureMailAndDrive(outDir, input.model.title);
 
     const backlog = uiBacklog(plan);
     const limitations = [
@@ -159,6 +167,7 @@ export class AdonisGenerator implements ApplicationGenerator {
       "The foundation shell uses a light theme; process UI may change that.",
       "The design font is applied by name; web fonts are not bundled.",
       "Sign-up is closed; create users with `node ace user:create`.",
+      "Mail uses Amazon SES through the SES_* variables; file storage uses Amazon S3 through the S3_* variables.",
       ...(!input.mcp
         ? ["MCP is off: the application exposes no `/mcp` endpoint for agents."]
         : input.rbac
@@ -350,5 +359,63 @@ export class AdonisGenerator implements ApplicationGenerator {
       ["uninstall", "--save", "better-sqlite3"],
       10 * MINUTE,
     );
+  }
+
+  private async configureMailAndDrive(
+    outDir: string,
+    fromName: string,
+  ): Promise<void> {
+    await this.exec(
+      "install_mail_drive",
+      outDir,
+      "npm",
+      [
+        "install",
+        "--save",
+        "@adonisjs/mail",
+        "@adonisjs/drive",
+        "@aws-sdk/client-sesv2",
+        "@aws-sdk/client-s3",
+        "@aws-sdk/s3-request-presigner",
+      ],
+      10 * MINUTE,
+    );
+
+    await writeFile(join(outDir, "config", "mail.ts"), mailConfig());
+    await writeFile(join(outDir, "config", "drive.ts"), driveConfig());
+
+    const rcPath = join(outDir, "adonisrc.ts");
+    const patchedRc = ensureMailDriveRc(await readFile(rcPath, "utf8"));
+    if (patchedRc === undefined) {
+      throw new StepFailure(
+        "configure_mail_drive",
+        "adonisrc.ts has an unexpected shape after installing mail and drive",
+      );
+    }
+    await writeFile(rcPath, patchedRc);
+
+    const envSchemaPath = join(outDir, "start", "env.ts");
+    const schema = mailDriveEnvSchema(await readFile(envSchemaPath, "utf8"));
+    if (schema === undefined) {
+      throw new StepFailure(
+        "configure_mail_drive",
+        "start/env.ts has an unexpected shape",
+      );
+    }
+    await writeFile(envSchemaPath, schema);
+
+    for (const envFile of [".env.example", ".env"]) {
+      const path = join(outDir, envFile);
+      const source = await readFile(path, "utf8").catch(() => undefined);
+      if (source === undefined) continue;
+      const updated = mailDriveEnvFile(source, fromName);
+      if (updated === undefined) {
+        throw new StepFailure(
+          "configure_mail_drive",
+          `${envFile} has an unexpected shape`,
+        );
+      }
+      await writeFile(path, updated);
+    }
   }
 }
