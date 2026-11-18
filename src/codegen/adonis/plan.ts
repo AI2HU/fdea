@@ -1,9 +1,14 @@
 import type {
-  Actor,
   Entity,
   Field,
   ProcessModel,
 } from "../../contracts/processModel.js";
+import {
+  deriveAccess,
+  transitionPermission,
+  type CrudKind,
+  type RoleAccess,
+} from "../../process/access.js";
 import {
   camelCase,
   entityNames,
@@ -11,8 +16,6 @@ import {
   pascalCase,
   type EntityNames,
 } from "../../process/naming.js";
-
-export type CrudKind = "list" | "view" | "create" | "update" | "delete";
 
 export interface TransitionPlan {
   readonly stepId: string;
@@ -43,24 +46,11 @@ export interface EntityPlan {
   readonly displayField: string;
 }
 
-export interface RolePlan {
-  readonly actor: Actor;
-  readonly permissions: readonly string[];
-}
-
 export interface GenerationPlan {
   readonly entities: readonly EntityPlan[];
   readonly permissions: readonly string[];
-  readonly roles: readonly RolePlan[];
+  readonly roles: readonly RoleAccess[];
 }
-
-export const crudPermission = (entityId: string, kind: CrudKind): string =>
-  `${entityId}.${kind}`;
-
-export const transitionPermission = (
-  entityId: string,
-  stepId: string,
-): string => `${entityId}.${stepId}`;
 
 const FIRST_DISPLAY_TYPES = new Set(["string", "enum"]);
 
@@ -81,17 +71,13 @@ export const relationName = (field: Field): string => camelCase(field.name);
 export const buildPlan = (model: ProcessModel): GenerationPlan => {
   const crud = new Map<string, Set<CrudKind>>();
   const transitions = new Map<string, TransitionPlan[]>();
-  const permissionsByActor = new Map<string, Set<string>>();
-  for (const actor of model.actors) permissionsByActor.set(actor.id, new Set());
 
   for (const step of model.steps) {
     for (const operation of step.operations) {
-      let permission: string;
       if (
         operation.kind === "transition" &&
         operation.transition !== undefined
       ) {
-        permission = transitionPermission(operation.entity_id, step.id);
         const list = transitions.get(operation.entity_id) ?? [];
         const names = entityNames(
           model.entities.find(
@@ -103,21 +89,17 @@ export const buildPlan = (model: ProcessModel): GenerationPlan => {
           label: step.name,
           method: `transition${pascalCase(step.id)}`,
           routeName: `${names.routeName}.${step.id}`,
-          permission,
+          permission: transitionPermission(operation.entity_id, step.id),
           field: operation.transition.field,
           from: operation.transition.from,
           to: operation.transition.to,
         });
         transitions.set(operation.entity_id, list);
-      } else {
-        const kind = operation.kind as CrudKind;
-        permission = crudPermission(operation.entity_id, kind);
+      } else if (operation.kind !== "transition") {
         const kinds = crud.get(operation.entity_id) ?? new Set<CrudKind>();
-        kinds.add(kind);
+        kinds.add(operation.kind);
         crud.set(operation.entity_id, kinds);
       }
-      for (const actorId of step.actor_ids)
-        permissionsByActor.get(actorId)?.add(permission);
     }
   }
 
@@ -148,27 +130,8 @@ export const buildPlan = (model: ProcessModel): GenerationPlan => {
     return plan;
   };
   const entities = model.entities.map(build);
-
-  const permissions = [
-    ...new Set(
-      model.steps.flatMap((step) =>
-        step.operations.map((operation) =>
-          operation.kind === "transition"
-            ? transitionPermission(operation.entity_id, step.id)
-            : crudPermission(operation.entity_id, operation.kind as CrudKind),
-        ),
-      ),
-    ),
-  ].sort();
-
-  return {
-    entities,
-    permissions,
-    roles: model.actors.map((actor) => ({
-      actor,
-      permissions: [...(permissionsByActor.get(actor.id) ?? [])].sort(),
-    })),
-  };
+  const { permissions, roles } = deriveAccess(model);
+  return { entities, permissions, roles };
 };
 
 const managedFieldsOf = (

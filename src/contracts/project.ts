@@ -17,9 +17,15 @@ export const DirectivesSchema = z.object({
     .enum(STACKS)
     .optional()
     .describe(
-      "fullstack: AdonisJS + Vue with database, auth and MCP. static: Astro + Vue static website.",
+      "fullstack: AdonisJS + Vue with database, auth and optional MCP. static: Astro + Vue static website.",
     ),
   rbac: z.boolean().optional(),
+  mcp: z
+    .boolean()
+    .optional()
+    .describe(
+      "Whether the fullstack application exposes an MCP server for agents. Always false on the static stack.",
+    ),
   deployment: z
     .enum(["cloud", "local", "none"])
     .optional()
@@ -121,6 +127,7 @@ export const GenerationResultSchema = z.object({
   stack: z.enum(STACKS).default("fullstack"),
   deployment: z.enum(["cloud", "local", "none"]),
   rbac: z.boolean(),
+  mcp: z.boolean().default(false),
   design_kind: z.enum(["inferred", "agent_provided", "shadcn_default"]),
   files: z.array(z.string()),
   ui_backlog: z
@@ -177,6 +184,7 @@ export const ProjectStateSchema = z.object({
   mock_data: MockDataSchema.optional(),
   answers: z.array(AnswerRecordSchema),
   schema_approval: SchemaApprovalSchema.optional(),
+  access_approval: SchemaApprovalSchema.optional(),
   submitted_design: SubmittedDesignSchema.optional(),
   generation: GenerationResultSchema.optional(),
 });

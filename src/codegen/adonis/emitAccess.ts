@@ -121,21 +121,24 @@ export default class Permission extends PermissionSchema {}`,
   ),
 ];
 
-export const userModelFile = (rbac: boolean): GeneratedFile =>
-  file(
+export const userModelFile = (rbac: boolean, mcp: boolean): GeneratedFile => {
+  const tokensImport = mcp
+    ? "\nimport { DbAccessTokensProvider } from '@adonisjs/auth/access_tokens'"
+    : "";
+  const tokens = mcp
+    ? "  static accessTokens = DbAccessTokensProvider.forModel(User)\n\n"
+    : "";
+  return file(
     "app/models/user.ts",
     rbac
       ? `import { UserSchema } from '#database/schema'
 import Role from '#models/role'
 import hash from '@adonisjs/core/services/hash'
 import { compose } from '@adonisjs/core/helpers'
-import { withAuthFinder } from '@adonisjs/auth/mixins/lucid'
-import { DbAccessTokensProvider } from '@adonisjs/auth/access_tokens'
+import { withAuthFinder } from '@adonisjs/auth/mixins/lucid'${tokensImport}
 
 export default class User extends compose(UserSchema, withAuthFinder(hash)) {
-  static accessTokens = DbAccessTokensProvider.forModel(User)
-
-  private grantedPermissions?: Set<string>
+${tokens}  private grantedPermissions?: Set<string>
 
   get initials() {
     const [first, last] = this.fullName ? this.fullName.split(' ') : this.email.split('@')
@@ -162,13 +165,10 @@ export default class User extends compose(UserSchema, withAuthFinder(hash)) {
       : `import { UserSchema } from '#database/schema'
 import hash from '@adonisjs/core/services/hash'
 import { compose } from '@adonisjs/core/helpers'
-import { withAuthFinder } from '@adonisjs/auth/mixins/lucid'
-import { DbAccessTokensProvider } from '@adonisjs/auth/access_tokens'
+import { withAuthFinder } from '@adonisjs/auth/mixins/lucid'${tokensImport}
 
 export default class User extends compose(UserSchema, withAuthFinder(hash)) {
-  static accessTokens = DbAccessTokensProvider.forModel(User)
-
-  get initials() {
+${tokens}  get initials() {
     const [first, last] = this.fullName ? this.fullName.split(' ') : this.email.split('@')
     if (first && last) {
       return \`\${first.charAt(0)}\${last.charAt(0)}\`.toUpperCase()
@@ -176,6 +176,106 @@ export default class User extends compose(UserSchema, withAuthFinder(hash)) {
     return \`\${first.slice(0, 2)}\`.toUpperCase()
   }
 }`,
+  );
+};
+
+export const authConfigFile = (mcp: boolean): GeneratedFile =>
+  file(
+    "config/auth.ts",
+    `import { defineConfig } from '@adonisjs/auth'
+import { sessionGuard, sessionUserProvider } from '@adonisjs/auth/session'
+${mcp ? "import { tokensGuard, tokensUserProvider } from '@adonisjs/auth/access_tokens'\n" : ""}import type { InferAuthenticators, InferAuthEvents, Authenticators } from '@adonisjs/auth/types'
+
+const authConfig = defineConfig({
+  default: 'web',
+  guards: {
+    web: sessionGuard({
+      useRememberMeTokens: false,
+      provider: sessionUserProvider({
+        model: () => import('#models/user'),
+      }),
+    }),
+${
+  mcp
+    ? `    api: tokensGuard({
+      provider: tokensUserProvider({
+        tokens: 'accessTokens',
+        model: () => import('#models/user'),
+      }),
+    }),
+`
+    : ""
+}  },
+})
+
+export default authConfig
+
+declare module '@adonisjs/auth/types' {
+  export interface Authenticators extends InferAuthenticators<typeof authConfig> {}
+}
+declare module '@adonisjs/core/types' {
+  interface EventsList extends InferAuthEvents<Authenticators> {}
+}`,
+  );
+
+export const shieldConfigFile = (mcp: boolean): GeneratedFile =>
+  file(
+    "config/shield.ts",
+    `import { defineConfig } from '@adonisjs/shield'
+
+const shieldConfig = defineConfig({
+  csp: {
+    enabled: false,
+    directives: {},
+    reportOnly: false,
+  },
+  csrf: {
+    enabled: true,
+    exceptRoutes: [${mcp ? "'/mcp'" : ""}],
+    enableXsrfCookie: true,
+    methods: ['POST', 'PUT', 'PATCH', 'DELETE'],
+  },
+  hsts: {
+    enabled: true,
+    maxAge: '180 days',
+  },
+  contentTypeSniffing: {
+    enabled: true,
+  },
+})
+
+export default shieldConfig`,
+  );
+
+export const kernelFile = (mcp: boolean): GeneratedFile =>
+  file(
+    "start/kernel.ts",
+    `import router from '@adonisjs/core/services/router'
+import server from '@adonisjs/core/services/server'
+
+server.errorHandler(() => import('#exceptions/handler'))
+
+server.use([
+  () => import('#middleware/container_bindings_middleware'),
+  () => import('@adonisjs/static/static_middleware'),
+  () => import('@adonisjs/cors/cors_middleware'),
+  () => import('@adonisjs/vite/vite_middleware'),
+  () => import('#middleware/inertia_middleware'),
+])
+
+router.use([
+  () => import('@adonisjs/core/bodyparser_middleware'),
+  () => import('@adonisjs/session/session_middleware'),
+  () => import('@adonisjs/shield/shield_middleware'),
+  () => import('@adonisjs/auth/initialize_auth_middleware'),
+  () => import('#middleware/silent_auth_middleware'),
+  () => import('#middleware/initialize_bouncer_middleware'),
+])
+
+export const middleware = router.named({
+  guest: () => import('#middleware/guest_middleware'),
+  auth: () => import('#middleware/auth_middleware'),
+${mcp ? "  mcp: () => import('#middleware/mcp_middleware'),\n" : ""}})`,
   );
 
 export const loginValidatorFile = (): GeneratedFile =>

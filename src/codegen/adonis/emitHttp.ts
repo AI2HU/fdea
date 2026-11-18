@@ -2,9 +2,9 @@ import type { Field } from "../../contracts/processModel.js";
 import { camelCase } from "../../process/naming.js";
 import { referenceOptionsName } from "./emitData.js";
 import { file, quote, type GeneratedFile } from "../files.js";
+import { crudPermission } from "../../process/access.js";
 import {
   attribute,
-  crudPermission,
   initialValues,
   updateFields,
   relationName,

@@ -1,9 +1,9 @@
 import { referenceOptionsName } from "./emitData.js";
 import { file, type GeneratedFile } from "../files.js";
+import { crudPermission } from "../../process/access.js";
 import {
   attribute,
   createFields,
-  crudPermission,
   labelOf,
   updateFields,
   type EntityPlan,
@@ -87,7 +87,7 @@ export const uiBacklog = (plan: GenerationPlan): UiPageBacklogItem[] => {
   return items;
 };
 
-const entitySection = (plan: EntityPlan): string => {
+const entitySection = (plan: EntityPlan, mcp: boolean): string => {
   const { names } = plan;
   const pages = uiBacklog({
     entities: [plan],
@@ -96,7 +96,7 @@ const entitySection = (plan: EntityPlan): string => {
   });
   const pageBlock =
     pages.length === 0
-      ? "_No Inertia pages (mutations only via MCP or transitions on other entities)._"
+      ? `_No Inertia pages (mutations only via ${mcp ? "MCP or " : ""}transitions on other entities)._`
       : pages
           .map(
             (item) => `### \`${item.page}.tsx\`
@@ -144,11 +144,16 @@ ${mutations.length === 0 ? "_none_" : mutations.join("\n")}
 `;
 };
 
+export interface UiContractOptions {
+  readonly rbac: boolean;
+  readonly mcp: boolean;
+  readonly mock: boolean;
+}
+
 export const uiContractFile = (
   title: string,
   plan: GenerationPlan,
-  rbac: boolean,
-  mock: boolean,
+  { rbac, mcp, mock }: UiContractOptions,
 ): GeneratedFile => {
   const backlog = uiBacklog(plan);
   const pages =
@@ -165,18 +170,19 @@ export const uiContractFile = (
     "UI.md",
     `# UI contract — ${title}
 
-Codegen built the **foundation** (database, models, validators, controllers, routes, auth,${rbac ? " RBAC," : ""} MCP, design tokens, and shadcn-style primitives). **Process UI is yours to invent.**
+Codegen built the **foundation** (database, models, validators, controllers, routes, auth,${rbac ? " RBAC," : ""}${mcp ? " MCP," : ""} design tokens, and shadcn-style primitives). **Process UI is yours to invent.**
 
 Create every page listed below under \`inertia/pages/\`. Controllers already call \`inertia.render\` with these names and props. You may redesign layouts, navigation, dashboard, marketing surfaces, motion, and components however you want. Prefer the product and design sources over generic admin CRUD.
 
 ## Rules
 
-1. Implement every backlog page so the matching route works end-to-end.
-2. Wire mutations with Adonis Inertia \`Form\` (or \`router\`) to the route names below — do not invent parallel APIs.
-3. ${rbac ? "Hide or disable actions the user cannot perform (`useCan` / `permissions` shared props)." : "RBAC is off; every signed-in user may use every action."}
-4. Keep identity values and labels separate; use transformer props as provided.
-5. After UI work: \`npm run typecheck\` and \`node ace build\` in the app directory.
-6. Do **not** call FDEA \`generate_application\` again to change UI — edit this app in place. Regenerate only into a new empty directory when the process model or schema changes.
+1. Before writing any code, write a multi-step implementation plan from this contract (shared layout and navigation, then each backlog page with its route, props and mutations${rbac ? ", the permissions each page and action checks" : ""}, then verification) and show it to the user. Implement it step by step; do not start on pages until the plan exists.
+2. Implement every backlog page so the matching route works end-to-end.
+3. Wire mutations with Adonis Inertia \`Form\` (or \`router\`) to the route names below — do not invent parallel APIs.
+4. ${rbac ? "Hide or disable actions the user cannot perform (`useCan` / `permissions` shared props)." : "RBAC is off; every signed-in user may use every action."}
+5. Keep identity values and labels separate; use transformer props as provided.
+6. After UI work: \`npm run typecheck\` and \`node ace build\` in the app directory.
+7. Do **not** call FDEA \`generate_application\` again to change UI — edit this app in place. Regenerate only into a new empty directory when the process model or schema changes.
 
 ## Backlog
 
@@ -199,7 +205,7 @@ This is a prototype: the database holds mock records only, loaded by \`node ace 
 - Client helpers: \`urlFor\` / \`Form\` from \`~/client\` and \`@adonisjs/inertia/vue\`
 - Types: \`import type { Data } from '@generated/data'\`
 
-${plan.entities.map(entitySection).join("\n")}
+${plan.entities.map((entity) => entitySection(entity, mcp)).join("\n")}
 `,
   );
 };

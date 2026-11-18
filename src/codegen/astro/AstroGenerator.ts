@@ -178,6 +178,7 @@ export class AstroGenerator implements ApplicationGenerator {
       stack: "static",
       deployment: "none",
       rbac: false,
+      mcp: false,
       design_kind: input.design.kind,
       files: files.map((generated) => generated.path),
       ui_backlog: backlog.map((item) => ({

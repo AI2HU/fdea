@@ -42,6 +42,8 @@ const HANDLERS: Handlers = {
   get_database_schema: (service, input) => service.getDatabaseSchema(input),
   approve_database_schema: (service, input) =>
     service.approveDatabaseSchema(input),
+  get_access_matrix: (service, input) => service.getAccessMatrix(input),
+  approve_access_matrix: (service, input) => service.approveAccessMatrix(input),
   generate_application: (service, input) => service.generateApplication(input),
   project_status: (service, input) => service.projectStatus(input),
 };

@@ -32,6 +32,7 @@ const generator: ApplicationGenerator = {
       stack: input.stack,
       deployment: input.deployment,
       rbac: input.rbac,
+      mcp: input.mcp,
       design_kind: input.design.kind,
       files: [],
       ui_backlog: [],
@@ -104,7 +105,7 @@ const selectPurchaseScope = async (projectId: string, sourceId: string) => {
 };
 
 describe("clarification gate", () => {
-  it("refuses to generate until opportunities, model, RBAC and deployment are settled", async () => {
+  it("refuses to generate until opportunities, model, RBAC, MCP, deployment, schema and access are settled", async () => {
     const { projectId, sourceId } = await startProject();
 
     const early = await failure("generate_application", {
@@ -152,6 +153,17 @@ describe("clarification gate", () => {
         { id: "directive:deployment", answer: "cloud" },
       ],
     });
+    const mcpBlocked = await failure("generate_application", {
+      project_id: projectId,
+    });
+    if (mcpBlocked.tag !== "not_ready")
+      throw new Error(`unexpected ${mcpBlocked.tag}`);
+    expect(mcpBlocked.blockers.join(" ")).toContain("directive:mcp");
+
+    await call("answer_clarifications", {
+      project_id: projectId,
+      answers: [{ id: "directive:mcp", answer: "true" }],
+    });
     const schemaBlocked = await failure("generate_application", {
       project_id: projectId,
     });
@@ -176,6 +188,45 @@ describe("clarification gate", () => {
       project_id: projectId,
       approved: true,
     });
+    const accessBlocked = await failure("generate_application", {
+      project_id: projectId,
+    });
+    if (accessBlocked.tag !== "not_ready")
+      throw new Error(`unexpected ${accessBlocked.tag}`);
+    expect(accessBlocked.blockers.join(" ")).toContain("directive:access");
+
+    const matrix = await call("get_access_matrix", { project_id: projectId });
+    expect(matrix["approved"]).toBe(false);
+    const access = matrix["access"] as {
+      roles: Array<{ id: string; permissions: string[] }>;
+      summary: string;
+    };
+    expect(access.roles.find((role) => role.id === "approver")).toEqual({
+      id: "approver",
+      name: "Approver",
+      permissions: [
+        "purchase_request.approve_request",
+        "purchase_request.list",
+      ],
+    });
+    expect(access.summary).toContain("# Who can do what");
+    expect(access.summary).toContain(
+      "### Employee (`employee`)\n- Create Purchase request (`purchase_request.create`)",
+    );
+    expect(access.summary).toContain(
+      "| Permission | Employee | Approver | Buyer |",
+    );
+
+    const answered = await failure("answer_clarifications", {
+      project_id: projectId,
+      answers: [{ id: "directive:access", answer: "approved" }],
+    });
+    expect(answered.tag).toBe("invalid_input");
+
+    await call("approve_access_matrix", {
+      project_id: projectId,
+      approved: true,
+    });
     await call("generate_application", { project_id: projectId });
 
     expect(generated).toHaveLength(1);
@@ -183,10 +234,92 @@ describe("clarification gate", () => {
       fidelity: "foundation",
       stack: "fullstack",
       rbac: true,
+      mcp: true,
       deployment: "cloud",
       projectName: "Buy Desk",
     });
     expect(generated[0]?.design.kind).toBe("shadcn_default");
+  });
+
+  it("asks again who can do what after a new process model", async () => {
+    const { projectId, sourceId } = await startProject();
+    await selectPurchaseScope(projectId, sourceId);
+    await call("submit_process_model", {
+      project_id: projectId,
+      model: purchaseModel(sourceId),
+    });
+    await call("answer_clarifications", {
+      project_id: projectId,
+      answers: [
+        { id: "directive:fidelity", answer: "foundation" },
+        { id: "directive:stack", answer: "fullstack" },
+        { id: "directive:rbac", answer: "true" },
+        { id: "directive:mcp", answer: "false" },
+        { id: "directive:deployment", answer: "local" },
+      ],
+    });
+    await call("approve_access_matrix", {
+      project_id: projectId,
+      approved: true,
+    });
+    const approved = await call("project_status", { project_id: projectId });
+    expect(approved["access_approved"]).toBe(true);
+
+    const model = purchaseModel(sourceId);
+    const raise = model.steps.find((step) => step.id === "raise_request");
+    if (raise === undefined) throw new Error("fixture has no raise_request");
+    raise.actor_ids = ["employee", "buyer"];
+    await call("submit_process_model", { project_id: projectId, model });
+
+    const status = await call("project_status", { project_id: projectId });
+    expect(status["access_approved"]).toBe(false);
+    const matrix = await call("get_access_matrix", { project_id: projectId });
+    const roles = (
+      matrix["access"] as {
+        roles: Array<{ id: string; permissions: string[] }>;
+      }
+    ).roles;
+    expect(roles.find((role) => role.id === "buyer")?.permissions).toContain(
+      "purchase_request.create",
+    );
+  });
+
+  it("skips the access matrix without RBAC and turns MCP off", async () => {
+    const { projectId, sourceId } = await startProject();
+    await selectPurchaseScope(projectId, sourceId);
+    await call("submit_process_model", {
+      project_id: projectId,
+      model: purchaseModel(sourceId),
+    });
+    await call("answer_clarifications", {
+      project_id: projectId,
+      answers: [
+        { id: "directive:fidelity", answer: "foundation" },
+        { id: "directive:stack", answer: "fullstack" },
+        { id: "directive:rbac", answer: "false" },
+        { id: "directive:mcp", answer: "false" },
+        { id: "directive:deployment", answer: "local" },
+      ],
+    });
+    const questions = await call("list_clarifications", {
+      project_id: projectId,
+    });
+    const ids = (questions["clarifications"] as Array<{ id: string }>).map(
+      (item) => item.id,
+    );
+    expect(ids).toContain("directive:mcp");
+    expect(ids).not.toContain("directive:access");
+    const refused = await failure("get_access_matrix", {
+      project_id: projectId,
+    });
+    expect(refused.tag).toBe("invalid_input");
+
+    await call("approve_database_schema", {
+      project_id: projectId,
+      approved: true,
+    });
+    await call("generate_application", { project_id: projectId });
+    expect(generated[0]).toMatchObject({ rbac: false, mcp: false });
   });
 
   it("generates a prototype from submitted mock data", async () => {
@@ -214,12 +347,22 @@ describe("clarification gate", () => {
       project_id: projectId,
       mock_data: purchaseMockData,
     });
+    const questions = await call("list_clarifications", {
+      project_id: projectId,
+    });
+    const ids = (questions["clarifications"] as Array<{ id: string }>).map(
+      (item) => item.id,
+    );
+    expect(ids).not.toContain("directive:mcp");
+    expect(ids).not.toContain("directive:access");
+
     await call("generate_application", { project_id: projectId });
     expect(generated).toHaveLength(1);
     expect(generated[0]).toMatchObject({
       fidelity: "prototype",
       stack: "static",
       rbac: false,
+      mcp: false,
       deployment: "none",
       mockData: purchaseMockData,
     });
@@ -319,6 +462,7 @@ describe("clarification gate", () => {
       (item) => item.id,
     );
     expect(afterIds).toContain("directive:rbac");
+    expect(afterIds).toContain("directive:mcp");
     expect(afterIds).toContain("directive:schema");
   });
 

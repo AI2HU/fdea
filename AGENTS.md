@@ -9,11 +9,12 @@ Forward Deploy Engineering Anything (FDEA) is an MCP server and CLI that ingest 
 - Fidelity is always asked: `foundation` (production, real data only) or `prototype` (the same production-ready application filled with mock data). FDEA never prescribes how a prototype is built: no galleries, approaches or lighter scaffolds.
 - A prototype's mock data is derived from the context of the sources by the agent and submitted with `submit_mock_data`; FDEA validates it against the process model (types, enums, references, uniqueness) and generation is blocked until it is valid.
 - The stack is always asked: `fullstack` (AdonisJS + Vue) or `static` (Astro + Vue islands).
-- For the fullstack stack: RBAC and cloud-or-local are always asked, never defaulted; the derived database schema must be approved before generation. Static sites have no database, so none of these apply.
-- Fullstack codegen emits data, HTTP, auth, MCP, design tokens and a thin Vue shell; `UI.md` / `ui_backlog` list the Inertia pages the agent must invent.
+- For the fullstack stack: RBAC, MCP and cloud-or-local are always asked, never defaulted; the derived database schema must be approved before generation. With RBAC, the step-derived access matrix (who can do what, one role per actor) must also be approved; changing it means changing step actors in the process model. Static sites have no database, so none of these apply.
+- Fullstack codegen emits data, HTTP, auth, MCP (only when asked for), design tokens and a thin Vue shell; `UI.md` / `ui_backlog` list the Inertia pages the agent must invent.
+- After generation, the agent writes and shows a multi-step implementation plan from `UI.md` before writing any process UI code; `UI.md` states this as its first rule.
 - Static codegen emits typed content collections (JSON under `src/data/`), design tokens, a layout and Vue primitives; `UI.md` / `ui_backlog` list the Astro pages the agent must invent and the process writes a static site cannot perform.
 - Prototype codegen is the same as above plus the mock data: a `database/seeders/mock_data_seeder.ts` (fullstack, loaded by `node ace db:seed`) or records in `src/data/*.json` (static).
-- Generated fullstack applications are AI-native: they expose an MCP server whose tools reuse the same RBAC permissions as the UI.
+- Generated fullstack applications with MCP on are AI-native: they expose an MCP server whose tools reuse the same RBAC permissions as the UI.
 - Every opportunity and process-model element carries a verbatim quote that is verified against the stored source text.
 
 ## Architecture
@@ -21,12 +22,12 @@ Forward Deploy Engineering Anything (FDEA) is an MCP server and CLI that ingest 
 Dependencies flow inward: `contracts` and `domain`, then `process` and `design`, then `application`, then adapters (`cli.ts`, `server/`) and composition.
 
 - `src/contracts/`: Zod schemas for the opportunity map, process model, project state and tool inputs. Tool descriptions live next to them.
-- `src/process/`: opportunity ranking, naming, integrity validation, mock-data validation and seed ordering, completeness gaps and derived clarifications.
+- `src/process/`: opportunity ranking, naming, integrity validation, mock-data validation and seed ordering, completeness gaps, derived clarifications, and access derivation (`access.ts`: permission slugs and role grants shared by the access matrix and codegen).
 - `src/ingestion/`: one extractor per source kind. OCR sits behind the `OcrPort`.
 - `src/design/`: color helpers and design-token resolution (agent-provided, then inferred from design sources, then the shadcn default).
 - `src/application/`: `FdeaService` workflows and the `ApplicationGenerator` port. `callTool` validates input and is the single entry for CLI and MCP.
 - `src/codegen/`: `StackGenerator` routes generation by stack; `workspace.ts`, `runner.ts`, `toolchain.ts` and `files.ts` are shared by both generators.
-- `src/codegen/adonis/`: the fullstack Adonis + Vue generator. `plan.ts` derives permissions, roles and transitions once; `emit*.ts` are pure functions returning files (`emitUi.ts` writes the agent contract, `emitMock.ts` the mock-data seeder); `AdonisGenerator.ts` scaffolds `--kit=vue`, then emits the application through an injectable `CommandRunner`.
+- `src/codegen/adonis/`: the fullstack Adonis + Vue generator. `plan.ts` derives transitions once and takes permissions and roles from `process/access.ts`; `emit*.ts` are pure functions returning files (`emitUi.ts` writes the agent contract, `emitMock.ts` the mock-data seeder); `AdonisGenerator.ts` scaffolds `--kit=vue`, then emits the application through an injectable `CommandRunner`.
 - `src/codegen/astro/`: the static Astro + Vue generator. `kit.ts` patches the minimal starter; `emitSite.ts` reuses the Adonis plan, theme CSS and Vue primitives, and writes the mock records when present.
 - `src/store/`: disk-backed project store with atomic writes.
 - `src/setup/`: `fdea setup` and `fdea doctor`.

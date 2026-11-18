@@ -83,21 +83,21 @@ export const TOOL_DESCRIPTIONS: Record<ToolName, ToolDescription> = {
     cli: "questions",
     readOnly: true,
     description:
-      "List the questions that block generation: opportunity priorities, build scope, fidelity, process gaps and declared unknowns. Projects created with skip_pain omit priority and scope questions. Every build also asks fullstack vs static; fullstack then asks RBAC, cloud vs local, and schema approval. The static stack has no database, so it skips those. A prototype additionally needs submit_mock_data. Ask the user each open question; do not answer for them.",
+      "List the questions that block generation: opportunity priorities, build scope, fidelity, process gaps and declared unknowns. Projects created with skip_pain omit priority and scope questions. Every build also asks fullstack vs static; fullstack then asks RBAC, MCP, cloud vs local, schema approval and, when RBAC is on, approval of who can do what (access matrix). The static stack has no database, so it skips those. A prototype additionally needs submit_mock_data. Ask the user each open question; do not answer for them.",
   },
   answer_clarifications: {
     title: "Answer clarifications",
     cli: "answer",
     readOnly: false,
     description:
-      "Record the user's answers by clarification id. Priority answers feed the opportunity ranking. Fidelity and stack answers set directives (the static stack forces no database and ignores RBAC/deployment). Fullstack RBAC and deployment answers set those directives. Answers to process questions require resubmitting the process model. Scope uses select_opportunity.",
+      "Record the user's answers by clarification id. Priority answers feed the opportunity ranking. Fidelity and stack answers set directives (the static stack forces no database and ignores RBAC/MCP/deployment). Fullstack RBAC, MCP and deployment answers set those directives. Answers to process questions require resubmitting the process model. Scope uses select_opportunity, schema approval uses approve_database_schema and access approval uses approve_access_matrix.",
   },
   set_implementation_directives: {
     title: "Set implementation directives",
     cli: "directives",
     readOnly: false,
     description:
-      "Set fidelity (foundation, or prototype: the same application filled with mock data), stack (fullstack AdonisJS + Vue, or static Astro + Vue), whether the application requires RBAC, and cloud (PostgreSQL) or local (SQLite). The static stack forces no database; deployment and RBAC are ignored.",
+      "Set fidelity (foundation, or prototype: the same application filled with mock data), stack (fullstack AdonisJS + Vue, or static Astro + Vue), whether the application requires RBAC, whether it exposes an MCP server, and cloud (PostgreSQL) or local (SQLite). The static stack forces no database; deployment, RBAC and MCP are ignored.",
   },
   get_design_spec: {
     title: "Get the design specification",
@@ -127,12 +127,26 @@ export const TOOL_DESCRIPTIONS: Record<ToolName, ToolDescription> = {
     description:
       "Fullstack stack only. Record whether the user approved the database schema for the current process model. Required before generate_application on the fullstack stack. Does not apply to the static stack. A new process model invalidates a previous approval.",
   },
+  get_access_matrix: {
+    title: "Get the access matrix",
+    cli: "access",
+    readOnly: true,
+    description:
+      "Fullstack stack with RBAC only. Return who can do what: one role per process actor and the permissions it is granted by the steps it performs, with a markdown summary. Show summary to the user and ask whether each role should have exactly these permissions, then record their decision with approve_access_matrix. To change a grant, change the step actors in the process model and resubmit it.",
+  },
+  approve_access_matrix: {
+    title: "Approve the access matrix",
+    cli: "approve-access",
+    readOnly: false,
+    description:
+      "Fullstack stack with RBAC only. Record whether the user approved the role permissions for the current process model. Required before generate_application when RBAC is on. A new process model invalidates a previous approval.",
+  },
   generate_application: {
     title: "Generate the application",
     cli: "generate",
     readOnly: false,
     description:
-      "Generate a Vue artifact. fullstack: AdonisJS with Lucid, HTTP, auth, optional RBAC, MCP, design tokens, shell — process pages via UI.md. static: Astro static website with typed content collections, design tokens and layout — pages via UI.md (no server, database, auth or MCP). A prototype is generated the same way and ships the submitted mock data (seeded with db:seed on fullstack, JSON content on static). Refuses until clarifications for the chosen fidelity and stack are settled.",
+      "Generate a Vue artifact. fullstack: AdonisJS with Lucid, HTTP, auth, optional RBAC, optional MCP, design tokens, shell — process pages via UI.md. static: Astro static website with typed content collections, design tokens and layout — pages via UI.md (no server, database, auth or MCP). A prototype is generated the same way and ships the submitted mock data (seeded with db:seed on fullstack, JSON content on static). Refuses until clarifications for the chosen fidelity and stack are settled.",
   },
   project_status: {
     title: "Project status",

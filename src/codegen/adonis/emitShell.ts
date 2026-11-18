@@ -1,10 +1,7 @@
 import type { DesignTokens } from "../../contracts/project.js";
 import { file, quote, type GeneratedFile } from "../files.js";
-import {
-  crudPermission,
-  type EntityPlan,
-  type GenerationPlan,
-} from "./plan.js";
+import { crudPermission } from "../../process/access.js";
+import type { EntityPlan, GenerationPlan } from "./plan.js";
 
 export const cssFile = (tokens: DesignTokens): GeneratedFile =>
   file("inertia/css/app.css", themeCss(tokens));

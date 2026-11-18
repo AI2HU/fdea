@@ -29,6 +29,7 @@ const inputFor = (
   fidelity: "foundation",
   stack: "fullstack",
   rbac: true,
+  mcp: true,
   deployment: "cloud",
   design: {
     kind: "shadcn_default",
@@ -161,6 +162,31 @@ describe("emitted application", () => {
       contentsOf(files, "app/mcp/tools/purchase_request_create_tool.ts"),
     ).toContain('bouncer.with(PurchaseRequestPolicy).authorize("create")');
     expect(contentsOf(files, "app/models/user.ts")).toContain("accessTokens");
+  });
+
+  it("emits no MCP server when MCP is off", () => {
+    const plain = emitProject(inputFor({ mcp: false }));
+    const paths = plain.map((file) => file.path);
+    expect(paths.some((path) => path.startsWith("app/mcp/"))).toBe(false);
+    expect(paths).not.toContain("commands/mcp_token.ts");
+    expect(paths).not.toContain("config/mcp.ts");
+    expect(contentsOf(plain, "app/models/user.ts")).not.toContain(
+      "accessTokens",
+    );
+    expect(contentsOf(plain, "start/kernel.ts")).not.toContain("mcp");
+    expect(contentsOf(plain, "start/kernel.ts")).toContain(
+      "initialize_bouncer_middleware",
+    );
+    expect(contentsOf(plain, "config/auth.ts")).not.toContain("tokensGuard");
+    expect(contentsOf(plain, "config/shield.ts")).not.toContain("/mcp");
+    expect(contentsOf(plain, "README.md")).not.toContain("/mcp");
+    expect(contentsOf(plain, "UI.md")).not.toContain("MCP");
+  });
+
+  it("asks the agent for a multi-step plan before UI code", () => {
+    expect(contentsOf(files, "UI.md")).toContain(
+      "1. Before writing any code, write a multi-step implementation plan",
+    );
   });
 
   it("carries the design tokens into the stylesheet", () => {

@@ -256,6 +256,8 @@ export const runCli = async (
     .option("--stack <kind>", "fullstack or static")
     .option("--rbac", "the application requires RBAC")
     .option("--no-rbac", "the application does not require RBAC")
+    .option("--mcp", "the application exposes an MCP server")
+    .option("--no-mcp", "the application does not expose an MCP server")
     .option("--deployment <kind>", "cloud or local")
     .action(
       async (
@@ -264,6 +266,7 @@ export const runCli = async (
           fidelity?: string;
           stack?: string;
           rbac?: boolean;
+          mcp?: boolean;
           deployment?: string;
         },
       ) =>
@@ -276,6 +279,7 @@ export const runCli = async (
               : { fidelity: options.fidelity }),
             ...(options.stack === undefined ? {} : { stack: options.stack }),
             ...(options.rbac === undefined ? {} : { rbac: options.rbac }),
+            ...(options.mcp === undefined ? {} : { mcp: options.mcp }),
             ...(options.deployment === undefined
               ? {}
               : { deployment: options.deployment }),
@@ -329,6 +333,36 @@ export const runCli = async (
         }
         await run(
           "approve_database_schema",
+          { project_id: projectId, approved: options.yes === true },
+          compact(),
+        );
+      },
+    );
+
+  program
+    .command(TOOL_DESCRIPTIONS.get_access_matrix.cli)
+    .description(describe("get_access_matrix"))
+    .argument("<project_id>")
+    .action(async (projectId: string) =>
+      run("get_access_matrix", { project_id: projectId }, compact()),
+    );
+
+  program
+    .command(TOOL_DESCRIPTIONS.approve_access_matrix.cli)
+    .description(describe("approve_access_matrix"))
+    .argument("<project_id>")
+    .option("--yes", "record that the user approved who can do what")
+    .option("--no", "record that the user rejected the role permissions")
+    .action(
+      async (projectId: string, options: { yes?: boolean; no?: boolean }) => {
+        if (options.yes === true && options.no === true) {
+          throw new InvalidArgumentError("Pass either --yes or --no");
+        }
+        if (options.yes !== true && options.no !== true) {
+          throw new InvalidArgumentError("Pass --yes or --no");
+        }
+        await run(
+          "approve_access_matrix",
           { project_id: projectId, approved: options.yes === true },
           compact(),
         );

@@ -107,13 +107,19 @@ export const TOOL_INPUTS = {
       .enum(STACKS)
       .optional()
       .describe(
-        "fullstack: AdonisJS + Vue (database, auth, MCP). static: Astro + Vue static website (no server, database, auth or MCP).",
+        "fullstack: AdonisJS + Vue (database, auth, optional MCP). static: Astro + Vue static website (no server, database, auth or MCP).",
       ),
     rbac: z
       .boolean()
       .optional()
       .describe(
         "Whether the application requires role-based access control. Ignored on the static stack.",
+      ),
+    mcp: z
+      .boolean()
+      .optional()
+      .describe(
+        "Whether the application exposes an MCP server so agents can operate the process. Ignored on the static stack.",
       ),
     deployment: z
       .enum(["cloud", "local"])
@@ -138,6 +144,17 @@ export const TOOL_INPUTS = {
       .boolean()
       .describe(
         "true when the user confirms the schema. false rejects it so the process model must be corrected and resubmitted.",
+      ),
+  },
+  get_access_matrix: {
+    project_id: projectId,
+  },
+  approve_access_matrix: {
+    project_id: projectId,
+    approved: z
+      .boolean()
+      .describe(
+        "true when the user confirms who can do what. false rejects it so the process model (step actors) must be corrected and resubmitted.",
       ),
   },
   generate_application: { project_id: projectId },

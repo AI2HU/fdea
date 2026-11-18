@@ -20,14 +20,18 @@ import {
   type SourceInput,
 } from "../ingestion/index.js";
 import { resolveDesign } from "../design/infer.js";
+import { buildAccessMatrixPreview } from "../process/access.js";
 import {
+  ACCESS_CLARIFICATION_ID,
   DEPLOYMENT_CLARIFICATION_ID,
   FIDELITY_CLARIFICATION_ID,
+  MCP_CLARIFICATION_ID,
   RBAC_CLARIFICATION_ID,
   SCHEMA_CLARIFICATION_ID,
   SCOPE_CLARIFICATION_ID,
   STACK_CLARIFICATION_ID,
   deriveClarifications,
+  isAccessApproved,
   isSchemaApproved,
   lacksDatabase,
   readinessBlockers,
@@ -428,6 +432,7 @@ export class FdeaService {
         scope_selection: undefined,
         model: undefined,
         schema_approval: undefined,
+        access_approval: undefined,
       };
       const ranked = rankOpportunities(next);
       const open = deriveClarifications(next).filter(
@@ -552,6 +557,7 @@ export class FdeaService {
         ],
         model: undefined,
         schema_approval: undefined,
+        access_approval: undefined,
       };
       const open = deriveClarifications(next).filter(
         (item) => item.status === "open",
@@ -624,6 +630,7 @@ export class FdeaService {
             ? state.mock_data
             : undefined,
         schema_approval: undefined,
+        access_approval: undefined,
       };
       const open = deriveClarifications(next).filter(
         (item) => item.status === "open",
@@ -651,7 +658,7 @@ export class FdeaService {
               : `${mockHint(next)}Show database_schema.summary to the user (Mermaid ER diagram plus table detail), then call approve_database_schema when they confirm.`
             : lacksDatabase(next)
               ? `${mockHint(next)}Ask the user each open clarification.`
-              : `${mockHint(next)}Ask the user each open clarification. For directive:schema, call get_database_schema and show the Mermaid summary before approve_database_schema.`,
+              : `${mockHint(next)}Ask the user each open clarification. For directive:schema, call get_database_schema and show the Mermaid summary before approve_database_schema. For directive:access, call get_access_matrix and show who can do what before approve_access_matrix.`,
       });
     });
   }
@@ -750,6 +757,12 @@ export class FdeaService {
           else if (["false", "no"].includes(value))
             directives = updateDirectives(directives, { rbac: false });
           else issues.push(`${id}: answer true or false`);
+        } else if (id === MCP_CLARIFICATION_ID) {
+          if (["true", "yes"].includes(value))
+            directives = updateDirectives(directives, { mcp: true });
+          else if (["false", "no"].includes(value))
+            directives = updateDirectives(directives, { mcp: false });
+          else issues.push(`${id}: answer true or false`);
         } else if (id === DEPLOYMENT_CLARIFICATION_ID) {
           if (value === "cloud" || value === "local")
             directives = updateDirectives(directives, { deployment: value });
@@ -757,6 +770,10 @@ export class FdeaService {
         } else if (id === SCHEMA_CLARIFICATION_ID) {
           issues.push(
             `${id}: use approve_database_schema after showing get_database_schema to the user`,
+          );
+        } else if (id === ACCESS_CLARIFICATION_ID) {
+          issues.push(
+            `${id}: use approve_access_matrix after showing get_access_matrix to the user`,
           );
         } else if (id === SCOPE_CLARIFICATION_ID) {
           issues.push(
@@ -817,13 +834,14 @@ export class FdeaService {
     fidelity?: Fidelity | undefined;
     stack?: Stack | undefined;
     rbac?: boolean | undefined;
+    mcp?: boolean | undefined;
     deployment?: "cloud" | "local" | undefined;
   }): Promise<Result<{ directives: ProjectState["directives"] }, FdeaError>> {
     const { project_id: projectId, ...patch } = input;
     if (Object.values(patch).every((value) => value === undefined)) {
       return err({
         tag: "invalid_input",
-        message: "Provide fidelity, stack, rbac and/or deployment.",
+        message: "Provide fidelity, stack, rbac, mcp and/or deployment.",
       });
     }
     return this.withProject(projectId, async (state) => {
@@ -996,6 +1014,106 @@ export class FdeaService {
     });
   }
 
+  private accessModel(state: ProjectState): Result<ProcessModel, FdeaError> {
+    if (lacksDatabase(state)) {
+      return err({
+        tag: "invalid_input",
+        message:
+          "The access matrix does not apply to the static stack (no users or roles).",
+      });
+    }
+    if (state.directives.rbac !== true) {
+      return err({
+        tag: "invalid_input",
+        message:
+          "The access matrix applies only when RBAC is on. Answer directive:rbac with true first.",
+      });
+    }
+    if (state.model === undefined) {
+      return err({
+        tag: "not_ready",
+        message: "Submit a process model before reviewing the access matrix.",
+        blockers: readinessBlockers(state),
+      });
+    }
+    return ok(state.model);
+  }
+
+  async getAccessMatrix(input: { project_id: string }): Promise<
+    Result<
+      {
+        access: ReturnType<typeof buildAccessMatrixPreview>;
+        model_seq: number;
+        approved: boolean;
+        next: string;
+      },
+      FdeaError
+    >
+  > {
+    return this.withProject(input.project_id, async (state) => {
+      const model = this.accessModel(state);
+      if (!model.ok) return model;
+      const approved = isAccessApproved(state);
+      return ok({
+        access: buildAccessMatrixPreview(model.value),
+        model_seq: state.model_seq,
+        approved,
+        next: approved
+          ? "The access matrix is already approved for this process model."
+          : "Show access.summary to the user and ask, role by role, whether each role should have exactly these permissions. If they confirm, call approve_access_matrix with approved=true; otherwise call it with approved=false and change the step actors in the process model.",
+      });
+    });
+  }
+
+  async approveAccessMatrix(input: {
+    project_id: string;
+    approved: boolean;
+  }): Promise<
+    Result<
+      {
+        approved: boolean;
+        model_seq: number;
+        open_clarifications: Clarification[];
+        next: string;
+      },
+      FdeaError
+    >
+  > {
+    return this.withProject(input.project_id, async (state) => {
+      const model = this.accessModel(state);
+      if (!model.ok) return model;
+      const seq = state.seq + 1;
+      const next: ProjectState = {
+        ...state,
+        seq,
+        access_approval: input.approved
+          ? { model_seq: state.model_seq, approved_at: this.timestamp() }
+          : undefined,
+        answers: [
+          ...state.answers,
+          {
+            clarification_id: ACCESS_CLARIFICATION_ID,
+            answer: input.approved ? "approved" : "rejected",
+            seq,
+          },
+        ],
+      };
+      const open = deriveClarifications(next).filter(
+        (item) => item.status === "open",
+      );
+      return this.commit(next, {
+        approved: input.approved,
+        model_seq: state.model_seq,
+        open_clarifications: open,
+        next: input.approved
+          ? open.length > 0
+            ? "Ask the user the remaining open clarifications."
+            : "Check project_status, then generate_application."
+          : "Change which actors perform each step to match who the user says can do what, then call submit_process_model.",
+      });
+    });
+  }
+
   async projectStatus(input: { project_id: string }): Promise<
     Result<
       {
@@ -1052,6 +1170,7 @@ export class FdeaService {
                 ),
               },
         schema_approved: isSchemaApproved(state),
+        access_approved: isAccessApproved(state),
         clarifications: {
           open: clarifications.filter((item) => item.status === "open").length,
           answered: clarifications.filter((item) => item.status === "answered")
@@ -1070,14 +1189,15 @@ export class FdeaService {
   }): Promise<Result<NonNullable<ProjectState["generation"]>, FdeaError>> {
     return this.withProject(input.project_id, async (state) => {
       const blockers = readinessBlockers(state);
-      const { fidelity, stack, rbac, deployment } = state.directives;
+      const { fidelity, stack, rbac, mcp, deployment } = state.directives;
       const access = lacksDatabase(state)
-        ? { rbac: false, deployment: "none" as const }
+        ? { rbac: false, mcp: false, deployment: "none" as const }
         : rbac === undefined ||
+            mcp === undefined ||
             deployment === undefined ||
             deployment === "none"
           ? undefined
-          : { rbac, deployment };
+          : { rbac, mcp, deployment };
       if (
         blockers.length > 0 ||
         state.model === undefined ||

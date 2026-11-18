@@ -109,13 +109,15 @@ export class AdonisGenerator implements ApplicationGenerator {
       ["ace", "add", "@adonisjs/bouncer", "--package-manager=npm"],
       10 * MINUTE,
     );
-    await this.exec(
-      "install_mcp",
-      outDir,
-      "npm",
-      ["install", "--save", "@jrmc/adonis-mcp"],
-      10 * MINUTE,
-    );
+    if (input.mcp) {
+      await this.exec(
+        "install_mcp",
+        outDir,
+        "npm",
+        ["install", "--save", "@jrmc/adonis-mcp"],
+        10 * MINUTE,
+      );
+    }
 
     for (const path of KIT_FILES_TO_REMOVE) {
       await rm(join(outDir, path), { force: true });
@@ -141,8 +143,10 @@ export class AdonisGenerator implements ApplicationGenerator {
       ["ace", "migration:run"],
       5 * MINUTE,
     );
-    await this.configureMcp(outDir);
-    await appendFile(join(outDir, "start", "routes.ts"), `\n${MCP_ROUTE}`);
+    if (input.mcp) {
+      await this.configureMcp(outDir);
+      await appendFile(join(outDir, "start", "routes.ts"), `\n${MCP_ROUTE}`);
+    }
     await rm(join(outDir, "tmp", "db.sqlite3"), { force: true });
     await rm(join(outDir, "storage", "db.sqlite3"), { force: true });
 
@@ -151,18 +155,21 @@ export class AdonisGenerator implements ApplicationGenerator {
 
     const backlog = uiBacklog(plan);
     const limitations = [
-      "Codegen emits the foundation only (data, HTTP, auth, MCP, design tokens, shell). Process Inertia pages are not generated — implement them from UI.md with full creative freedom.",
+      `Codegen emits the foundation only (data, HTTP, auth,${input.mcp ? " MCP," : ""} design tokens, shell). Process Inertia pages are not generated — write a multi-step plan from UI.md, then implement them with full creative freedom.`,
       "The foundation shell uses a light theme; process UI may change that.",
       "The design font is applied by name; web fonts are not bundled.",
       "Sign-up is closed; create users with `node ace user:create`.",
-      "Agents authenticate to `/mcp` with a bearer access token from `node ace mcp:token`.",
-      ...(input.rbac
-        ? [
-            "MCP tools enforce the same RBAC permissions as the UI through Bouncer policies.",
-          ]
-        : [
-            "RBAC is off: every authenticated MCP token may call every process tool.",
-          ]),
+      ...(!input.mcp
+        ? ["MCP is off: the application exposes no `/mcp` endpoint for agents."]
+        : input.rbac
+          ? [
+              "Agents authenticate to `/mcp` with a bearer access token from `node ace mcp:token`.",
+              "MCP tools enforce the same RBAC permissions as the UI through Bouncer policies.",
+            ]
+          : [
+              "Agents authenticate to `/mcp` with a bearer access token from `node ace mcp:token`.",
+              "RBAC is off: every authenticated MCP token may call every process tool.",
+            ]),
       ...(input.mockData === undefined
         ? []
         : [
@@ -242,6 +249,7 @@ export class AdonisGenerator implements ApplicationGenerator {
       stack: "fullstack",
       deployment: input.deployment,
       rbac: input.rbac,
+      mcp: input.mcp,
       design_kind: input.design.kind,
       files: files.map((generated) => generated.path),
       ui_backlog: backlog.map((item) => ({

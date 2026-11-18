@@ -15,6 +15,7 @@ export interface GenerationInput {
   readonly fidelity: Fidelity;
   readonly stack: Stack;
   readonly rbac: boolean;
+  readonly mcp: boolean;
   readonly deployment: "cloud" | "local" | "none";
   readonly design: DesignSpec;
   /** Present for prototypes: the records the generated application ships with. */

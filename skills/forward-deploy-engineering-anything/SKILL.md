@@ -11,10 +11,10 @@ FDEA ingests documentation, ranks the most valuable software opportunities in th
 
 Ask `directive:fidelity` and then `directive:stack` before generating. A prototype is the same production-ready application as a foundation; the only difference is that its data is mock data you derive from the sources.
 
-| Stack       | Output                                                                                                                                                         | Gates                             |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| `fullstack` | Production Adonis + Vue foundation (Lucid, auth, optional RBAC, MCP, design tokens, shell). Process pages via `UI.md`.                                         | RBAC, deployment, schema approval |
-| `static`    | Static Astro + Vue website: typed content collections (JSON in `src/data/`), design tokens, layout, Vue primitives. Pages via `UI.md`. No server, auth or MCP. | Stack only                        |
+| Stack       | Output                                                                                                                                                         | Gates                                                               |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `fullstack` | Production Adonis + Vue foundation (Lucid, auth, optional RBAC, optional MCP, design tokens, shell). Process pages via `UI.md`.                                | RBAC, MCP, deployment, schema approval, access approval (RBAC only) |
+| `static`    | Static Astro + Vue website: typed content collections (JSON in `src/data/`), design tokens, layout, Vue primitives. Pages via `UI.md`. No server, auth or MCP. | Stack only                                                          |
 
 | Fidelity     | Data                                                                                                                       |
 | ------------ | -------------------------------------------------------------------------------------------------------------------------- |
@@ -40,21 +40,24 @@ A static site cannot persist writes. When the process needs users to create, upd
 8. `list_clarifications` and ask the user each remaining open question. Never answer for them. Always asked:
    - `directive:fidelity`: `foundation` or `prototype`
    - `directive:stack` (`fullstack` / `static`)
-   - When fullstack: `directive:rbac`, `directive:deployment` (`cloud` / `local`), `directive:schema`
-9. `answer_clarifications` with the user's answers. Answers to process questions require you to correct the sources or resubmit the model with `submit_process_model`. Scope uses `select_opportunity`, not `answer_clarifications`.
+   - When fullstack: `directive:rbac`, `directive:mcp` (should agents operate the process through an MCP server?), `directive:deployment` (`cloud` / `local`), `directive:schema`
+   - When fullstack with RBAC: `directive:access` (who can do what)
+9. `answer_clarifications` with the user's answers. Answers to process questions require you to correct the sources or resubmit the model with `submit_process_model`. Scope uses `select_opportunity`, schema approval `approve_database_schema` and access approval `approve_access_matrix`, not `answer_clarifications`.
 10. **Fullstack only:** `get_database_schema`, show `schema.summary` to the user, then `approve_database_schema`. Do not generate until they approve. A new process model invalidates approval. Static sites skip schema tools.
+    - **With RBAC:** `get_access_matrix`, show `access.summary` (each role and what it may do) to the user, and ask role by role whether each one should have exactly these permissions. Record the decision with `approve_access_matrix`. When the user wants a change, change the actors of the affected steps, resubmit the process model, and ask again. A new process model invalidates approval.
 11. `get_design_spec`. If no design source gave tokens and you can derive them from a design image or page, call `submit_design_spec`. Otherwise the shadcn default is used.
 12. **Prototype only:** `submit_mock_data` with realistic records for every entity, derived from the context of the sources: their vocabulary, names, places, currencies, volumes, languages and states. Fictional only, never real personal data. FDEA checks types, enums, references and uniqueness. It stays valid across a new process model only while it still validates.
 13. `generate_application`. It refuses until every blocker is resolved; `project_status` lists them.
-14. **Build the UI yourself** in the generated app directory:
-    - **Fullstack:** Read `UI.md`, implement every backlog page under `inertia/pages/*.vue`, wire to documented routes. Keep login and error pages working. When RBAC is on, use `useCan` / shared `permissions`. Finish with `npm run typecheck` and `node ace build`.
-    - **Static:** Read `UI.md`, implement every backlog page under `src/pages/*.astro` with `getCollection` / `getEntry` (dynamic pages export `getStaticPaths`). Use Vue components with `client:*` only for interactive islands. Do not invent records in `src/data/` beyond the submitted mock data. Finish with `npm run typecheck` and `npm run build`.
+14. **Plan before any code.** Read `UI.md` and `ui_backlog`, then write a multi-step implementation plan: shared layout and navigation, then each backlog page with its route, props and mutations (and, with RBAC, the permission each page and action checks), then verification. Show the plan to the user before writing any code; implement it step by step afterwards.
+15. **Build the UI yourself** in the generated app directory, following that plan:
+    - **Fullstack:** Implement every backlog page under `inertia/pages/*.vue`, wired to the documented routes. Keep login and error pages working. When RBAC is on, use `useCan` / shared `permissions`. Finish with `npm run typecheck` and `node ace build`.
+    - **Static:** Implement every backlog page under `src/pages/*.astro` with `getCollection` / `getEntry` (dynamic pages export `getStaticPaths`). Use Vue components with `client:*` only for interactive islands. Do not invent records in `src/data/` beyond the submitted mock data. Finish with `npm run typecheck` and `npm run build`.
 
 ## After generation
 
 Report `verification.typecheck`, that every backlog page exists, your own checks, the `limitations`, and the output directory. Tell the user to run the setup commands from the generated `README.md`.
 
-Fullstack foundations are AI-native: they expose `/mcp` with process tools. Create an access token with `node ace mcp:token`. When RBAC is on, every tool checks the same Bouncer permissions as the UI.
+When `mcp` is on, the fullstack application is AI-native: it exposes `/mcp` with process tools. Create an access token with `node ace mcp:token`. When RBAC is on, every tool checks the same Bouncer permissions as the UI. When `mcp` is off, there is no `/mcp` endpoint.
 
 ## Skip pain analysis
 
@@ -64,7 +67,8 @@ When the user asks to skip pain analysis, create the project with `skip_pain: tr
 
 - Discover value first: opportunity map → user ranking answers → selected scope → process model. Do not jump straight to entities for everything the documents mention. With `skip_pain`, model what the sources ask to build and skip the opportunity map.
 - Observations come from the documents; label inferences as such and put gaps in `unknowns`.
-- Ask, do not assume, on fidelity, stack, opportunity priority, RBAC and cloud vs local (RBAC/deployment only for the fullstack stack).
+- Ask, do not assume, on fidelity, stack, opportunity priority, RBAC, MCP, who can do what and cloud vs local (RBAC, MCP, access and deployment only for the fullstack stack).
+- Always write and show a multi-step implementation plan before writing any application code.
 - Do not invent process features the documents omit; UI presentation is free, process scope is not. Mock data is the only thing a prototype invents, and it stays fictional.
 - Do not edit generated files to work around a model problem; fix the model and regenerate into a new empty directory.
 - Frontend is Vue (Inertia for fullstack, Astro islands for static), not React.

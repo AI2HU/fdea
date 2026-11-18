@@ -6,9 +6,11 @@ export type ClarificationKind =
   | "directive_fidelity"
   | "directive_stack"
   | "directive_rbac"
+  | "directive_mcp"
   | "directive_deployment"
   | "directive_scope"
   | "directive_schema"
+  | "directive_access"
   | "value_priority"
   | "process_gap"
   | "declared_unknown";
@@ -26,16 +28,23 @@ export interface Clarification {
 export const FIDELITY_CLARIFICATION_ID = "directive:fidelity";
 export const STACK_CLARIFICATION_ID = "directive:stack";
 export const RBAC_CLARIFICATION_ID = "directive:rbac";
+export const MCP_CLARIFICATION_ID = "directive:mcp";
 export const DEPLOYMENT_CLARIFICATION_ID = "directive:deployment";
 export const SCOPE_CLARIFICATION_ID = "directive:scope";
 export const SCHEMA_CLARIFICATION_ID = "directive:schema";
+export const ACCESS_CLARIFICATION_ID = "directive:access";
 
 export const isSchemaApproved = (state: ProjectState): boolean =>
   state.model !== undefined &&
   state.schema_approval !== undefined &&
   state.schema_approval.model_seq === state.model_seq;
 
-/** Only the fullstack stack has a database, RBAC and a deployment target. */
+export const isAccessApproved = (state: ProjectState): boolean =>
+  state.model !== undefined &&
+  state.access_approval !== undefined &&
+  state.access_approval.model_seq === state.model_seq;
+
+/** Only the fullstack stack has a database, RBAC, MCP and a deployment target. */
 const usesDatabase = (directives: Directives): boolean =>
   directives.stack === "fullstack";
 
@@ -61,15 +70,17 @@ export const updateDirectives = (
     ...(stack === undefined ? {} : { stack }),
   };
   if (stack === "static") {
-    return { ...next, rbac: false, deployment: "none" };
+    return { ...next, rbac: false, mcp: false, deployment: "none" };
   }
   const carried = current.deployment !== "none";
   const rbac = patch.rbac ?? (carried ? current.rbac : undefined);
+  const mcp = patch.mcp ?? (carried ? current.mcp : undefined);
   const deployment =
     patch.deployment ?? (carried ? current.deployment : undefined);
   return {
     ...next,
     ...(rbac === undefined ? {} : { rbac }),
+    ...(mcp === undefined ? {} : { mcp }),
     ...(deployment === undefined || deployment === "none"
       ? {}
       : { deployment }),
@@ -108,7 +119,7 @@ const withStatus = (
 };
 
 export const deriveClarifications = (state: ProjectState): Clarification[] => {
-  const { fidelity, stack, rbac, deployment } = state.directives;
+  const { fidelity, stack, rbac, mcp, deployment } = state.directives;
   const result: Clarification[] = [
     directiveClarification(
       {
@@ -129,7 +140,7 @@ export const deriveClarifications = (state: ProjectState): Clarification[] => {
           id: STACK_CLARIFICATION_ID,
           kind: "directive_stack",
           question:
-            "Build a fullstack application (AdonisJS + Vue with database, auth and MCP) or a static website (Astro + Vue, content in files, no server)?",
+            "Build a fullstack application (AdonisJS + Vue with database, auth and optional MCP) or a static website (Astro + Vue, content in files, no server)?",
           options: ["fullstack", "static"],
         },
         stack,
@@ -148,6 +159,16 @@ export const deriveClarifications = (state: ProjectState): Clarification[] => {
           options: ["true", "false"],
         },
         rbac === undefined ? undefined : String(rbac),
+      ),
+      directiveClarification(
+        {
+          id: MCP_CLARIFICATION_ID,
+          kind: "directive_mcp",
+          question:
+            "Should the application expose an MCP server so AI agents can operate the process through tools (with the same permissions as the UI)?",
+          options: ["true", "false"],
+        },
+        mcp === undefined ? undefined : String(mcp),
       ),
       directiveClarification(
         {
@@ -215,6 +236,20 @@ export const deriveClarifications = (state: ProjectState): Clarification[] => {
         isSchemaApproved(state) ? "approved" : undefined,
       ),
     );
+    if (rbac === true) {
+      result.push(
+        directiveClarification(
+          {
+            id: ACCESS_CLARIFICATION_ID,
+            kind: "directive_access",
+            question:
+              "Who can do what? Call get_access_matrix, show the permissions of each role (summary) to the user, ask whether each role should have exactly these permissions, and record their decision with approve_access_matrix before generating.",
+            options: ["approved", "rejected"],
+          },
+          isAccessApproved(state) ? "approved" : undefined,
+        ),
+      );
+    }
   }
 
   for (const gap of completenessGaps(model)) {

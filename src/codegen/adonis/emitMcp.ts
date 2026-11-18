@@ -1,15 +1,14 @@
 import type { Field } from "../../contracts/processModel.js";
 import { camelCase, pascalCase } from "../../process/naming.js";
 import { file, quote, type GeneratedFile } from "../files.js";
+import { crudPermission, type CrudKind } from "../../process/access.js";
 import {
   attribute,
   createFields,
-  crudPermission,
   initialValues,
   labelOf,
   relationName,
   updateFields,
-  type CrudKind,
   type EntityPlan,
   type GenerationPlan,
 } from "./plan.js";
@@ -457,103 +456,6 @@ ${
 }`,
   );
 
-export const authConfigFile = (): GeneratedFile =>
-  file(
-    "config/auth.ts",
-    `import { defineConfig } from '@adonisjs/auth'
-import { sessionGuard, sessionUserProvider } from '@adonisjs/auth/session'
-import { tokensGuard, tokensUserProvider } from '@adonisjs/auth/access_tokens'
-import type { InferAuthenticators, InferAuthEvents, Authenticators } from '@adonisjs/auth/types'
-
-const authConfig = defineConfig({
-  default: 'web',
-  guards: {
-    web: sessionGuard({
-      useRememberMeTokens: false,
-      provider: sessionUserProvider({
-        model: () => import('#models/user'),
-      }),
-    }),
-    api: tokensGuard({
-      provider: tokensUserProvider({
-        tokens: 'accessTokens',
-        model: () => import('#models/user'),
-      }),
-    }),
-  },
-})
-
-export default authConfig
-
-declare module '@adonisjs/auth/types' {
-  export interface Authenticators extends InferAuthenticators<typeof authConfig> {}
-}
-declare module '@adonisjs/core/types' {
-  interface EventsList extends InferAuthEvents<Authenticators> {}
-}`,
-  );
-
-export const shieldConfigFile = (): GeneratedFile =>
-  file(
-    "config/shield.ts",
-    `import { defineConfig } from '@adonisjs/shield'
-
-const shieldConfig = defineConfig({
-  csp: {
-    enabled: false,
-    directives: {},
-    reportOnly: false,
-  },
-  csrf: {
-    enabled: true,
-    exceptRoutes: ['/mcp'],
-    enableXsrfCookie: true,
-    methods: ['POST', 'PUT', 'PATCH', 'DELETE'],
-  },
-  hsts: {
-    enabled: true,
-    maxAge: '180 days',
-  },
-  contentTypeSniffing: {
-    enabled: true,
-  },
-})
-
-export default shieldConfig`,
-  );
-
-export const kernelFile = (): GeneratedFile =>
-  file(
-    "start/kernel.ts",
-    `import router from '@adonisjs/core/services/router'
-import server from '@adonisjs/core/services/server'
-
-server.errorHandler(() => import('#exceptions/handler'))
-
-server.use([
-  () => import('#middleware/container_bindings_middleware'),
-  () => import('@adonisjs/static/static_middleware'),
-  () => import('@adonisjs/cors/cors_middleware'),
-  () => import('@adonisjs/vite/vite_middleware'),
-  () => import('#middleware/inertia_middleware'),
-])
-
-router.use([
-  () => import('@adonisjs/core/bodyparser_middleware'),
-  () => import('@adonisjs/session/session_middleware'),
-  () => import('@adonisjs/shield/shield_middleware'),
-  () => import('@adonisjs/auth/initialize_auth_middleware'),
-  () => import('#middleware/silent_auth_middleware'),
-  () => import('#middleware/initialize_bouncer_middleware'),
-])
-
-export const middleware = router.named({
-  guest: () => import('#middleware/guest_middleware'),
-  auth: () => import('#middleware/auth_middleware'),
-  mcp: () => import('#middleware/mcp_middleware'),
-})`,
-  );
-
 export const accessTokensMigration = (timestamp: number): GeneratedFile =>
   file(
     `database/migrations/${timestamp}_create_auth_access_tokens_table.ts`,
@@ -649,9 +551,6 @@ export const mcpFiles = (
   const files: GeneratedFile[] = [
     mcpConfigFile(options.title),
     mcpMiddlewareFile(options.rbac),
-    authConfigFile(),
-    shieldConfigFile(),
-    kernelFile(),
     accessTokensMigration(1_810_000_000_000),
     mcpTokenCommandFile(),
     whoamiTool(options.rbac),

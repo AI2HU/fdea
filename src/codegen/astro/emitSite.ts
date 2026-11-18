@@ -260,12 +260,13 @@ There is no server, database, auth, RBAC or MCP. Every page is prerendered at bu
 
 ## Rules
 
-1. Create every backlog page under \`src/pages/\`. Load data with \`getCollection\` / \`getEntry\` from \`astro:content\`; dynamic pages export \`getStaticPaths\`.
-2. Write layout and content in \`.astro\`; use Vue components with a \`client:*\` directive only for interactive islands.
-3. ${mock ? "The JSON files under `src/data/` hold mock records only. They are fictional; present them as such." : "Author records in the JSON files under `src/data/`. Do not invent records the documents do not provide."}
-4. Keep identity values (entry ids, collection names) separate from labels.
-5. After UI work: \`npm run typecheck\` and \`npm run build\` in the site directory.
-6. Do **not** call FDEA \`generate_application\` again to change UI — edit this site in place. Regenerate only into a new empty directory when the process model changes.
+1. Before writing any code, write a multi-step implementation plan from this contract (shared layout and navigation, then each backlog page with its route and data, then the interactive islands, then verification) and show it to the user. Implement it step by step; do not start on pages until the plan exists.
+2. Create every backlog page under \`src/pages/\`. Load data with \`getCollection\` / \`getEntry\` from \`astro:content\`; dynamic pages export \`getStaticPaths\`.
+3. Write layout and content in \`.astro\`; use Vue components with a \`client:*\` directive only for interactive islands.
+4. ${mock ? "The JSON files under `src/data/` hold mock records only. They are fictional; present them as such." : "Author records in the JSON files under `src/data/`. Do not invent records the documents do not provide."}
+5. Keep identity values (entry ids, collection names) separate from labels.
+6. After UI work: \`npm run typecheck\` and \`npm run build\` in the site directory.
+7. Do **not** call FDEA \`generate_application\` again to change UI — edit this site in place. Regenerate only into a new empty directory when the process model changes.
 
 ## Backlog
 
